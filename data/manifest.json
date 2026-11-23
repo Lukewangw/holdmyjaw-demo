@@ -1,0 +1,71 @@
+{
+ "version": 1,
+ "clips": [
+  {
+   "id": "s01",
+   "kind": "speech",
+   "title": "How sweet the moonlight\u2026",
+   "file": "data/clips/s01.json"
+  },
+  {
+   "id": "s02",
+   "kind": "speech",
+   "title": "This is a mistake,\u2026",
+   "file": "data/clips/s02.json"
+  },
+  {
+   "id": "s03",
+   "kind": "speech",
+   "title": "If that is what\u2026",
+   "file": "data/clips/s03.json"
+  },
+  {
+   "id": "s04",
+   "kind": "speech",
+   "title": "Several days passed before\u2026",
+   "file": "data/clips/s04.json"
+  },
+  {
+   "id": "s05",
+   "kind": "speech",
+   "title": "Something of their troubling\u2026",
+   "file": "data/clips/s05.json"
+  },
+  {
+   "id": "s06",
+   "kind": "speech",
+   "title": "\"How do we stand?\"\u2026",
+   "file": "data/clips/s06.json"
+  },
+  {
+   "id": "s07",
+   "kind": "speech",
+   "title": "There was silence then\u2026",
+   "file": "data/clips/s07.json"
+  },
+  {
+   "id": "s08",
+   "kind": "speech",
+   "title": "Mr. Herter was doing\u2026",
+   "file": "data/clips/s08.json"
+  },
+  {
+   "id": "song1",
+   "kind": "song",
+   "title": "Row, Row, Row Your Boat (soprano)",
+   "file": "data/clips/song1.json"
+  },
+  {
+   "id": "song2",
+   "kind": "song",
+   "title": "Row, Row, Row Your Boat (baritone)",
+   "file": "data/clips/song2.json"
+  },
+  {
+   "id": "song3",
+   "kind": "song",
+   "title": "Dona nobis pacem (baritone)",
+   "file": "data/clips/song3.json"
+  }
+ ]
+}

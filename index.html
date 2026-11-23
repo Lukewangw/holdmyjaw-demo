@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hold My Jaw</title>
+<meta name="description" content="A speech recording, compressed to articulatory gestures, drives a body model of lips, tongue and jaw, and the jaw drives the VERA robot face.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Hold My Jaw">
+<meta property="og:description" content="A speech recording, compressed to articulatory gestures, drives a body model of lips, tongue and jaw, and the jaw drives the VERA robot face.">
+<meta property="og:url" content="https://lukewangw.github.io/holdmyjaw-demo/">
+<meta property="og:image" content="https://lukewangw.github.io/holdmyjaw-demo/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an instrument bench. The head stands on its stage at the left, the controls sit on a narrow rack at the right, and the
+   gestural score runs underneath both like a strip chart. The story continues below in plain sections. */
+:root {
+  --bg: #edf1f3; --surface: #f7f9fa; --panel: #ffffff; --ink: #142026; --ink-2: #4c5c66; --ink-3: #7a8a94; --line: #d3dbe0; --line-2: #e4e9ec;
+  --accent: #dc5f24; --accent-ink: #ffffff; --blue: #2c69cc; --ok: #1f8a6a; --warn: #c2410c;
+  --stage-a: #ffffff; --stage-b: #d9dee2; --shadow: rgba(20, 32, 38, 0.10);
+  --c-lips: #d4466a; --c-tt: #e2832a; --c-tb: #c2412f; --c-jaw: #2c69cc; --c-vel: #8562d0; --c-glo: #1d9a7d; --c-pitch: #5f6f7a;
+  --a-skin: #f3e7de; --a-skin-edge: #b79f8d; --a-air: #ffffff; --a-bone: #ece4d4; --a-bone-edge: #a39a87; --a-tongue: #e59c94;
+  --a-tongue-edge: #af625a; --a-lip: #dd978d; --a-soft: #efcdc5; --a-soft-edge: #b08177; --a-tooth: #ffffff; --a-tooth-edge: #8f8f8f;
+  --rim: #7fb2ff;
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Geist", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "Geist Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1215; --surface: #10181c; --panel: #141e23; --ink: #e3ebef; --ink-2: #9aabb4; --ink-3: #6d7f89; --line: #243238; --line-2: #1b262b;
+  --accent: #ff874d; --accent-ink: #1b0b03; --blue: #6c9eff; --ok: #4fd1a5; --warn: #ff9d6b;
+  --stage-a: #33404a; --stage-b: #080c0e; --shadow: rgba(0, 0, 0, 0.45);
+  --c-lips: #ff6f91; --c-tt: #ffa04d; --c-tb: #ff6a55; --c-jaw: #6c9eff; --c-vel: #a98bff; --c-glo: #3fd3a9; --c-pitch: #9fb0ba;
+  --a-skin: #3a302b; --a-skin-edge: #8c7566; --a-air: #0b1114; --a-bone: #cfc6b4; --a-bone-edge: #8d8573; --a-tongue: #d98379;
+  --a-tongue-edge: #f0a59c; --a-lip: #cc7c73; --a-soft: #a9827b; --a-soft-edge: #d6aaa2; --a-tooth: #f2f2f2; --a-tooth-edge: #9a9a9a;
+  --rim: #8fbfff; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1215; --surface: #10181c; --panel: #141e23; --ink: #e3ebef; --ink-2: #9aabb4; --ink-3: #6d7f89; --line: #243238; --line-2: #1b262b;
+  --accent: #ff874d; --accent-ink: #1b0b03; --blue: #6c9eff; --ok: #4fd1a5; --warn: #ff9d6b;
+  --stage-a: #33404a; --stage-b: #080c0e; --shadow: rgba(0, 0, 0, 0.45);
+  --c-lips: #ff6f91; --c-tt: #ffa04d; --c-tb: #ff6a55; --c-jaw: #6c9eff; --c-vel: #a98bff; --c-glo: #3fd3a9; --c-pitch: #9fb0ba;
+  --a-skin: #3a302b; --a-skin-edge: #8c7566; --a-air: #0b1114; --a-bone: #cfc6b4; --a-bone-edge: #8d8573; --a-tongue: #d98379;
+  --a-tongue-edge: #f0a59c; --a-lip: #cc7c73; --a-soft: #a9827b; --a-soft-edge: #d6aaa2; --a-tooth: #f2f2f2; --a-tooth-edge: #9a9a9a;
+  --rim: #8fbfff; color-scheme: dark }
+
+html { box-sizing: border-box; scroll-behavior: smooth; }
+*, *::before, *::after { box-sizing: inherit; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); -webkit-font-smoothing: antialiased; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+button { font: inherit; color: inherit; }
+a { color: var(--blue); text-underline-offset: 3px; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1440px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font: 500 11px/1.2 var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+
+/* top bar */
+.top { display: flex; align-items: center; gap: 16px 28px; flex-wrap: wrap; padding-block: 14px 10px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.brand b { font: 700 25px/1 var(--f-display); letter-spacing: -0.01em; }
+.brand span { color: var(--ink-2); font-size: 14px; }
+.top nav { margin-left: auto; display: flex; gap: 4px 18px; flex-wrap: wrap; font-size: 14px; }
+.top nav a { color: var(--ink-2); text-decoration: none; }
+.top nav a:hover { color: var(--ink); }
+
+/* the bench */
+.bench { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); grid-template-areas: "stage rack" "score score"; gap: 14px; padding-block: 4px 18px; }
+.stage { grid-area: stage; position: relative; min-width: 0; height: clamp(440px, 66vh, 760px); border-radius: var(--r); overflow: hidden; border: 1px solid var(--line);
+  background: radial-gradient(ellipse 75% 70% at 52% 40%, var(--stage-a) 0%, var(--stage-b) 100%); touch-action: pan-y; }
+.stage canvas.gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.stage canvas.gl:active { cursor: grabbing; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: color-mix(in srgb, var(--panel) 86%, transparent); border: 1px solid var(--line);
+  box-shadow: 0 2px 10px var(--shadow); backdrop-filter: blur(6px); }
+.seg button { border: 0; background: none; padding: 7px 13px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.tl { position: absolute; top: 12px; left: 12px; z-index: 3; display: flex; gap: 8px; flex-wrap: wrap; }
+.tr { position: absolute; top: 12px; right: 12px; z-index: 3; display: flex; gap: 8px; }
+.chip { border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 86%, transparent); border-radius: 999px; padding: 7px 12px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--ink-2); box-shadow: 0 2px 10px var(--shadow); backdrop-filter: blur(6px); }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--ink-3); }
+.flat { position: absolute; left: 12px; bottom: 12px; z-index: 2; width: clamp(150px, 26%, 250px); aspect-ratio: 1; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--line); background: var(--a-air); box-shadow: 0 6px 18px var(--shadow); max-width: 100%; }
+.flat canvas { width: 100%; height: 100%; display: block; }
+.flat .eyebrow { position: absolute; left: 8px; top: 7px; font-size: 9.5px; }
+.joints { position: absolute; right: 12px; bottom: 12px; z-index: 2; display: grid; grid-template-columns: auto auto; gap: 2px 12px; padding: 9px 12px;
+  border-radius: 12px; background: color-mix(in srgb, var(--panel) 84%, transparent); border: 1px solid var(--line); backdrop-filter: blur(6px);
+  font: 12px/1.45 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.joints b { color: var(--ink); font-weight: 500; text-align: right; }
+.joints .j5 { color: var(--c-jaw); }
+.explode { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  border-radius: 999px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.explode input { width: min(220px, 40vw); accent-color: var(--accent); }
+.tags { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.tag { position: absolute; transform: translate(-50%, -50%); font: 500 11px/1 var(--f-mono); padding: 4px 6px; border-radius: 6px; white-space: nowrap;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 2px 6px var(--shadow); }
+.tag.j { color: #fff; border: 0; }
+.tag.j.o { background: var(--accent); color: var(--accent-ink); }
+.tag.j.b { background: var(--blue); }
+.hint { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 3; font-size: 13px; color: var(--ink-2); background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; transition: opacity .4s; pointer-events: none; white-space: nowrap; }
+.hint.gone { opacity: 0; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; z-index: 4; color: var(--ink-2); font-size: 14px; }
+
+/* the rack */
+.rack { grid-area: rack; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; min-width: 0; }
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs button { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--ink-2); }
+.tabs button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--panel); }
+.clips { display: flex; flex-wrap: wrap; gap: 6px; }
+.clips button { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 6px 10px; cursor: pointer; font-size: 12.5px; color: var(--ink-2);
+  max-width: 100%; text-align: left; line-height: 1.3; }
+.clips button[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.say { font: 600 clamp(17px, 1.7vw, 21px)/1.32 var(--f-display); margin: 12px 0 2px; text-wrap: balance; color: var(--ink-3); }
+.say .w { transition: color .08s; }
+.say .w.now { color: var(--ink); }
+.say .w.done { color: var(--ink-2); }
+.who { font-size: 12px; color: var(--ink-3); }
+.transport { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.play { width: 54px; height: 54px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); flex: none; }
+.play svg { width: 22px; height: 22px; fill: currentColor; }
+.time { font: 13px var(--f-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.voice { display: grid; gap: 8px; margin-top: 12px; justify-items: start; }
+.voice .chip { box-shadow: none; backdrop-filter: none; }
+.voice .seg { box-shadow: none; backdrop-filter: none; background: var(--surface); width: fit-content; max-width: 100%; flex-wrap: wrap; border-radius: 12px; }
+.voice .seg button { border-radius: 9px; }
+.cap { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.packet { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+.packet span { font: 11px/1 var(--f-mono); padding: 4px 3px; border-radius: 4px; background: var(--surface); border: 1px solid var(--line-2); color: var(--ink-2); }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.stat b { display: block; font: 600 17px/1.15 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.stat span { font-size: 11.5px; color: var(--ink-3); }
+.shelfhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.switch { display: inline-flex; align-items: center; gap: 9px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px 5px 6px; cursor: pointer;
+  font-weight: 600; font-size: 13px; }
+.switch .track { width: 36px; height: 20px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; flex: none; }
+.switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); transition: transform .15s; box-shadow: 0 1px 3px var(--shadow); }
+.switch[aria-checked="true"] .track { background: var(--ok); }
+.switch[aria-checked="true"] .track::after { transform: translateX(16px); }
+.shelf { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.tok { display: grid; justify-items: center; gap: 3px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 11.5px; font-weight: 600; color: var(--ink-3); min-width: 0; }
+.tok .disc { width: 100%; max-width: 52px; aspect-ratio: 1; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--line); display: grid; place-items: center; transition: transform .12s, border-color .12s; }
+.tok svg { width: 74%; height: 74%; }
+.tok[aria-pressed="true"] { color: var(--ink); }
+.tok[aria-pressed="true"] .disc { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.heard { margin-top: 10px; font-size: 13px; color: var(--ink-2); min-height: 2.6em; }
+.heard q { color: var(--ink); quotes: "“" "”"; }
+.heard .wer { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.bad { color: var(--warn); } .good { color: var(--ok); }
+
+/* the score */
+.score { grid-area: score; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px 8px; }
+.scorehead { display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; margin-bottom: 6px; }
+.scorehead h2 { font: 600 15px/1.2 var(--f-display); margin: 0; }
+.scorehead .cap { margin-left: auto; }
+.scorebox { position: relative; overflow-x: auto; }
+.scorebox canvas { display: block; width: 100%; min-width: 560px; height: 330px; cursor: crosshair; }
+.tip { position: absolute; z-index: 3; pointer-events: none; background: var(--ink); color: var(--panel); font: 12px/1.35 var(--f-mono); padding: 6px 8px; border-radius: 7px; white-space: nowrap; }
+
+/* story */
+.story { padding-block: 34px 10px; border-top: 1px solid var(--line); }
+.story h2 { font: 700 clamp(24px, 3vw, 34px)/1.1 var(--f-display); letter-spacing: -0.01em; margin: 6px 0 10px; text-wrap: balance; max-width: 26ch; }
+.story p.lede { font-size: 17px; color: var(--ink-2); max-width: 68ch; margin: 0 0 18px; }
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 16px 0; counter-reset: s; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; min-width: 0; }
+.step .n { font: 500 11px var(--f-mono); color: var(--accent); letter-spacing: .08em; }
+.step h3 { font: 600 16px/1.25 var(--f-display); margin: 4px 0 6px; }
+.step p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0 4px; }
+.fig { padding: 14px 16px; border-left: 3px solid var(--line); min-width: 0; }
+.fig b { display: block; font: 600 28px/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.fig span { font-size: 13.5px; color: var(--ink-2); }
+.fig small { display: block; font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.tablewrap { overflow-x: auto; margin: 14px 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line-2); }
+th { font: 500 11px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); background: var(--surface); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; width: 28%; }
+td .mono { font-size: 13px; }
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.cols ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
+.cols li { margin: 4px 0; }
+.parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 12px 0; }
+.part { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--ink-2); min-width: 0; }
+.part b { display: block; font: 500 12px var(--f-mono); color: var(--ink); margin-bottom: 2px; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: 13.5px; }
+footer { padding-block: 28px 40px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+footer p { max-width: 90ch; margin: 6px 0; }
+
+@media (max-width: 1100px) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .bench { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "rack" "score"; }
+  .stage { height: clamp(380px, 92vw, 560px); }
+  .figs, .cols { grid-template-columns: minmax(0, 1fr); }
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .tr { top: 58px; }
+  .hint { display: none; }
+  .flat { width: 34%; }
+  .joints { font-size: 11px; padding: 7px 9px; }
+  .seg button { padding: 6px 10px; }
+  .shelf { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><b>Hold My Jaw</b><span class="mono">plan → body → voice → VERA face</span></div>
+  </header>
+
+  <section class="bench" aria-label="Demo">
+    <div class="stage" id="stage">
+      <canvas class="gl" id="gl" aria-label="The VERA head in 3D. Drag to turn it."></canvas>
+      <div class="tags" id="tags"></div>
+      <div class="tl">
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" id="v-face" aria-pressed="true">Face</button>
+          <button type="button" id="v-xray" aria-pressed="false">X-ray</button>
+          <button type="button" id="v-mech" aria-pressed="false">Mechanism</button>
+        </div>
+      </div>
+      <div class="tr">
+        <button type="button" class="chip" id="flat-btn" aria-pressed="true" title="Mid-sagittal cut of the vocal tract">Cut view</button>
+        <button type="button" class="chip" id="reset-btn" title="Put the camera back">Reset</button>
+      </div>
+      <div class="hint" id="hint">▶ then X-ray</div>
+      <div class="flat" id="flat"><canvas id="flatc" width="500" height="500" aria-label="Mid-sagittal cut"></canvas><div class="eyebrow">Mid-sagittal cut</div></div>
+      <div class="joints" id="joints" aria-label="Joint readout">
+        <span>J1 yaw</span><b id="j1">0.0°</b><span>J2 pitch</span><b id="j2">0.0°</b><span>J3·J4 eyes</span><b id="j34">0° 0°</b><span class="j5">J5 jaw</span><b id="j5" class="j5">0.0°</b>
+      </div>
+      <div class="explode" id="explode" hidden><label for="explode-r">Assembled</label><input type="range" id="explode-r" min="0" max="1" step="0.01" value="0"><span>Parts P1–P7</span></div>
+      <div class="loading" id="loading">Building the head…</div>
+    </div>
+
+    <aside class="rack">
+      <div class="card">
+        <div class="tabs" role="group" aria-label="What it says">
+          <button type="button" id="t-speech" aria-pressed="true">Speech</button>
+          <button type="button" id="t-song" aria-pressed="false">Singing</button>
+        </div>
+        <div class="clips" id="clips"></div>
+        <p class="say" id="say"></p>
+        <div class="who" id="who"></div>
+        <div class="transport">
+          <button type="button" class="play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="play-icon" d="M7 4.5v15l13-7.5z"/></svg></button>
+          <div><div class="time" id="time">0.00 / 0.00 s</div><div class="cap" id="playcap"></div></div>
+        </div>
+        <div class="voice">
+          <button type="button" class="chip" id="music-btn" aria-pressed="true" hidden>♪ Piano</button>
+          <div class="cap" id="voicecap"></div>
+        </div>
+      </div>
+
+      <div class="card" id="plancard">
+        <div class="eyebrow">Plan sent</div>
+        <div class="packet" id="packet"></div>
+        <div class="stats" id="stats"></div>
+      </div>
+
+      <div class="card" id="loadcard">
+        <div class="shelfhead">
+          <div class="eyebrow">Load on the face</div>
+          <button type="button" class="switch" id="reflex" role="switch" aria-checked="true"><span class="track"></span>Reflexes</button>
+        </div>
+        <div class="shelf" id="shelf" role="group" aria-label="Loads"></div>
+        <div class="heard" id="heard"></div>
+      </div>
+    </aside>
+
+    <div class="score">
+      <div class="scorehead"><h2>Gestural score</h2><span class="eyebrow" id="scoremeta"></span><span class="cap mono">recording → our gestures (DMP) → articulators → VERA joints</span></div>
+      <div class="scorebox" id="scorebox"><canvas id="score" aria-label="Gestural score"></canvas><div class="tip" id="tip" hidden></div></div>
+    </div>
+  </section>
+
+  <footer id="credits">
+    <p>LibriTTS-R and VocalSet (CC BY 4.0) · body fitted to MNGU0 · head after the VERA proposal, Fig. 1 · three.js</p>
+  </footer>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
