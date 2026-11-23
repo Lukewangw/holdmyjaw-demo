@@ -24,7 +24,7 @@
 :root {
   --bg: #edf1f3; --surface: #f7f9fa; --panel: #ffffff; --ink: #142026; --ink-2: #4c5c66; --ink-3: #7a8a94; --line: #d3dbe0; --line-2: #e4e9ec;
   --accent: #dc5f24; --accent-ink: #ffffff; --blue: #2c69cc; --ok: #1f8a6a; --warn: #c2410c;
-  --stage-a: #ffffff; --stage-b: #d9dee2; --shadow: rgba(20, 32, 38, 0.10);
+  --stage-a: #fffefa; --stage-b: #eeede8; --shadow: rgba(20, 32, 38, 0.10);
   --c-lips: #d4466a; --c-tt: #e2832a; --c-tb: #c2412f; --c-jaw: #2c69cc; --c-vel: #8562d0; --c-glo: #1d9a7d; --c-pitch: #5f6f7a;
   --a-skin: #f3e7de; --a-skin-edge: #b79f8d; --a-air: #ffffff; --a-bone: #ece4d4; --a-bone-edge: #a39a87; --a-tongue: #e59c94;
   --a-tongue-edge: #af625a; --a-lip: #dd978d; --a-soft: #efcdc5; --a-soft-edge: #b08177; --a-tooth: #ffffff; --a-tooth-edge: #8f8f8f;
@@ -221,7 +221,7 @@ footer p { max-width: 90ch; margin: 6px 0; }
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand"><b>Hold My Jaw</b><span class="mono">plan → body → voice → VERA face</span></div>
+    <div class="brand"><b>Hold My Jaw</b><span class="mono">VERA · articulatory robot</span></div>
   </header>
 
   <section class="bench" aria-label="Demo">
@@ -236,11 +236,11 @@ footer p { max-width: 90ch; margin: 6px 0; }
         </div>
       </div>
       <div class="tr">
-        <button type="button" class="chip" id="flat-btn" aria-pressed="true" title="Mid-sagittal cut of the vocal tract">Cut view</button>
+        <button type="button" class="chip" id="flat-btn" aria-pressed="false" title="Mid-sagittal cut of the vocal tract">Cut view</button>
         <button type="button" class="chip" id="reset-btn" title="Put the camera back">Reset</button>
       </div>
-      <div class="hint" id="hint">▶ then X-ray</div>
-      <div class="flat" id="flat"><canvas id="flatc" width="500" height="500" aria-label="Mid-sagittal cut"></canvas><div class="eyebrow">Mid-sagittal cut</div></div>
+      <div class="hint gone" id="hint"></div>
+      <div class="flat" id="flat" hidden><canvas id="flatc" width="500" height="500" aria-label="Mid-sagittal cut"></canvas><div class="eyebrow">Mid-sagittal cut</div></div>
       <div class="joints" id="joints" aria-label="Joint readout">
         <span>J1 yaw</span><b id="j1">0.0°</b><span>J2 pitch</span><b id="j2">0.0°</b><span>J3·J4 eyes</span><b id="j34">0° 0°</b><span class="j5">J5 jaw</span><b id="j5" class="j5">0.0°</b>
       </div>
@@ -262,7 +262,6 @@ footer p { max-width: 90ch; margin: 6px 0; }
           <div><div class="time" id="time">0.00 / 0.00 s</div><div class="cap" id="playcap"></div></div>
         </div>
         <div class="voice">
-          <button type="button" class="chip" id="music-btn" aria-pressed="true" hidden>♪ Piano</button>
           <div class="cap" id="voicecap"></div>
         </div>
       </div>
@@ -294,6 +293,6 @@ footer p { max-width: 90ch; margin: 6px 0; }
   </footer>
 </div>
 
-<script type="module" src="./app.js"></script>
+<script type="module" src="./app.js?v=panels1"></script>
 </body>
 </html>

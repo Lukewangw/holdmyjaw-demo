@@ -1,7 +1,7 @@
 // app.js — Hold My Jaw: the VERA head speaking from a gestural plan.
 // Frame (cm): X = the head's left, Y = up, Z = forward. The anatomy drawing (x forward, y up) maps to (Z, Y) on X = 0.
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { buildHardware } from './hardware.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Anatomy, LA_CLOSED } from './tract.js';
@@ -47,29 +47,32 @@ const stage = $('#stage'), canvas = $('#gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .985;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
-// a studio for reflections: dark surround, softboxes (key front-left, strip right, top, rim behind); steel reads as steel
-function studio() {
-  const s = new THREE.Scene();
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
-    vertexShader: 'varying vec3 p; void main(){ p = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'varying vec3 p; void main(){ float h = normalize(p).y; vec3 c = mix(vec3(0.05,0.055,0.06), vec3(0.32,0.34,0.36), smoothstep(-0.4, 0.9, h)); gl_FragColor = vec4(c, 1.0); }' }));
-  s.add(sky);
-  const box = (w, h, pos, look, v) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(v, v, v), side: THREE.DoubleSide })); m.position.set(...pos); m.lookAt(...look); s.add(m); };
-  box(26, 20, [-24, 18, 28], [0, 0, 0], 6.0);     // key softbox
-  box(8, 30, [32, 6, 10], [0, 0, 0], 2.4);        // strip, right
-  box(30, 30, [0, 40, 0], [0, 0, 0], 2.2);        // top
-  box(10, 26, [-10, 10, -36], [0, 0, 0], 3.0);    // rim, behind
-  box(60, 6, [0, -2, 40], [0, 0, 0], 0.9);        // low front bounce
-  return s;
+// A 256 x 128 RGBE light probe supplies the actual softbox reflections.
+async function studioLighting() {
+  const response=await fetch('data/studio-rgbe.b64.txt');
+  if(!response.ok) throw new Error('Studio light probe missing');
+  const bytes=atob((await response.text()).trim());
+  const radiance=new Float32Array(bytes.length);
+  for(let i=0;i<bytes.length;i+=4) {
+    const gain=2**(bytes.charCodeAt(i+3)-136);
+    radiance[i]=bytes.charCodeAt(i)*gain;
+    radiance[i+1]=bytes.charCodeAt(i+1)*gain;
+    radiance[i+2]=bytes.charCodeAt(i+2)*gain;radiance[i+3]=1;
+  }
+  const image=new THREE.DataTexture(radiance,256,128,THREE.RGBAFormat,THREE.FloatType);
+  image.mapping=THREE.EquirectangularReflectionMapping;image.colorSpace=THREE.LinearSRGBColorSpace;
+  image.flipY=true;image.needsUpdate=true;
+  const environment=pmrem.fromEquirectangular(image);
+  image.dispose();pmrem.dispose();return environment.texture;
 }
-scene.environment = pmrem.fromScene(studio(), 0.02).texture;
-const camera = new THREE.PerspectiveCamera(25, 1, 2, 500);
-const HOME = { pos: new THREE.Vector3(38, 9, 62), tgt: new THREE.Vector3(0, 1.0, -8.2) };
-const VIEWS = { face: HOME, xray: { pos: new THREE.Vector3(64, 7.5, 16), tgt: new THREE.Vector3(0, 0.4, -5.6) }, mech: { pos: new THREE.Vector3(48, 18, 52), tgt: new THREE.Vector3(0, -0.6, -8.4) } };
+scene.environment=await studioLighting();
+const camera = new THREE.PerspectiveCamera(23, 1, 2, 500);
+const HOME = { pos: new THREE.Vector3(-43, 6.0, 50.0), tgt: new THREE.Vector3(0, 1.45, -7.4) };
+const VIEWS = { face: HOME, xray: { pos: new THREE.Vector3(64, 7.5, 16), tgt: new THREE.Vector3(0, 0.4, -5.6) }, mech: { pos: new THREE.Vector3(58, 21, 69), tgt: new THREE.Vector3(0, -2.4, -8.4) } };
 const fly = { t: 1, from: null, to: null };
 function flyTo(v) { fly.from = { pos: camera.position.clone(), tgt: controls.target.clone() }; fly.to = v; fly.t = reduceMotion ? 1 : 0; if (reduceMotion) { camera.position.copy(v.pos); controls.target.copy(v.tgt); } }
 camera.position.copy(HOME.pos);
@@ -79,20 +82,25 @@ controls.minDistance = 28; controls.maxDistance = 120; controls.minPolarAngle = 
 controls.update();
 
 scene.add(new THREE.HemisphereLight('#f2f5f8', '#3a4046', 0.35));
-const key = new THREE.DirectionalLight('#fff6ee', 2.3); key.position.set(-26, 30, 36); key.castShadow = true;
+const key = new THREE.DirectionalLight('#fff8ef', 1.75); key.position.set(-16, 32, 29); key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 2; key.shadow.normalBias = 0.04; Object.assign(key.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 10, far: 120 }); key.shadow.bias = -0.0006;
 key.target.position.set(0, -2, -8); scene.add(key, key.target);
-const rim = new THREE.DirectionalLight('#b8d2ff', 1.9); rim.position.set(30, 20, -40); scene.add(rim);
-const rim2 = new THREE.DirectionalLight('#b8d2ff', 1.0); rim2.position.set(-34, 10, -30); scene.add(rim2);
+const rim = new THREE.DirectionalLight('#d7e4ee', 1.05); rim.position.set(30, 20, -40); scene.add(rim);
+const rim2 = new THREE.DirectionalLight('#e5e4dc', .72); rim2.position.set(-34, 10, -30); scene.add(rim2);
 const fill = new THREE.DirectionalLight('#dfe7f1', 0.45); fill.position.set(40, 2, 36); scene.add(fill);
-const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), new THREE.ShadowMaterial({ opacity: 0.28 }));
-ground.rotation.x = -Math.PI / 2; ground.position.y = -12.62; ground.receiveShadow = true; scene.add(ground);
-const setGround = (y) => { ground.position.y = y - 0.01; };
+// A broad floor reflection and a contact shadow beneath the base keep the
+// studio floor soft. Directional shadows are reserved for the assembly itself.
+const floorMap = document.createElement('canvas'); floorMap.width = floorMap.height = 256;
+const floorCtx = floorMap.getContext('2d'), floorFalloff = floorCtx.createRadialGradient(128,128,0,128,128,127);
+for (const [at, alpha] of [[0,.34],[.49,.29],[.60,.16],[.76,.065],[1,0]]) floorFalloff.addColorStop(at, 'rgba(45,40,32,'+alpha+')');
+floorCtx.fillStyle = floorFalloff; floorCtx.fillRect(0,0,256,256);
+const floorTexture = new THREE.CanvasTexture(floorMap); floorTexture.colorSpace = THREE.SRGBColorSpace;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(23,21), new THREE.MeshBasicMaterial({map:floorTexture,transparent:true,depthWrite:false,toneMapped:false}));
+ground.rotation.x=-Math.PI/2; ground.renderOrder=-3; scene.add(ground);
 
 // ------------------------------------------------------------------------------------------------ materials
 const XR = { uXray: { value: 0 }, uRim: { value: new THREE.Color(C.rim) } };
 function xrayify(mat) {
-  mat.transparent = true;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uXray = XR.uXray; sh.uniforms.uRim = XR.uRim;
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uXray;\nuniform vec3 uRim;')
@@ -114,7 +122,7 @@ const M = {
   cable: new THREE.MeshStandardMaterial({ color: '#2f63b5', roughness: 0.55, transparent: true }),
   cable2: new THREE.MeshStandardMaterial({ color: '#b8402f', roughness: 0.55, transparent: true }),
   mouth: new THREE.MeshBasicMaterial({ color: '#0d1114' }),
-  sclera: new THREE.MeshPhysicalMaterial({ color: '#fbfbfa', roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.08 }),
+  sclera: new THREE.MeshPhysicalMaterial({ color: '#e5dfd3', envMapIntensity:.62, roughness: .34, clearcoat: .55, clearcoatRoughness: .15 }),
   cornea: new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.02, transparent: true, opacity: 0.18, clearcoat: 1, clearcoatRoughness: 0.02, depthWrite: false }),
   tongue: new THREE.MeshStandardMaterial({ color: '#e0837b', roughness: 0.5, emissive: '#5a1612', emissiveIntensity: 0.55 }),
   lip: new THREE.MeshStandardMaterial({ color: '#d76c7a', roughness: 0.5, emissive: '#4e1220', emissiveIntensity: 0.5 }),
@@ -128,16 +136,18 @@ const MECH = [M.print, M.metal, M.dark, M.cable, M.cable2];
 // iris texture: polar layout (x = angle, y = radius from the pupil outwards), for a spherical cap
 function irisTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
-  const grd = g.createLinearGradient(0, 0, 0, 128);
-  grd.addColorStop(0, '#07090b'); grd.addColorStop(0.42, '#07090b'); grd.addColorStop(0.46, '#2a3c4c'); grd.addColorStop(0.66, '#4b6578');
-  grd.addColorStop(0.84, '#36495a'); grd.addColorStop(0.92, '#141c24'); grd.addColorStop(0.97, '#1c232a'); grd.addColorStop(1, '#e9ecee');
-  g.fillStyle = grd; g.fillRect(0, 0, 512, 128);
-  g.globalAlpha = 0.35;
-  for (let i = 0; i < 260; i++) { const x = Math.random() * 512; g.strokeStyle = Math.random() < 0.5 ? '#7d9bb2' : '#1b2a36'; g.lineWidth = 1 + Math.random() * 1.5; g.beginPath(); g.moveTo(x, 60); g.lineTo(x + (Math.random() - 0.5) * 6, 114); g.stroke(); }
-  g.globalAlpha = 1;
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+  const grd=g.createLinearGradient(0,0,0,128);
+  for (const [stop,col] of [[0,'#070b0d'],[.44,'#090d0e'],[.47,'#1f2c31'],[.55,'#394c56'],
+    [.68,'#425b68'],[.83,'#2c4353'],[.94,'#203643'],[1,'#131c22']]) grd.addColorStop(stop,col);
+  g.fillStyle=grd;g.fillRect(0,0,512,128);
+  for (let i=0;i<360;i++) {
+    const a=i*512/360, wave=Math.sin(i*13.71);
+    g.strokeStyle=wave>0?'rgba(112,132,139,.31)':'rgba(16,35,42,.50)';g.lineWidth=1;
+    g.beginPath();g.moveTo(a,62+5*Math.cos(i*6.13));g.quadraticCurveTo(a+wave*4,87,a+wave*2,114+7*wave);g.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;
 }
-const IRIS = new THREE.MeshPhysicalMaterial({ map: irisTexture(), roughness: 0.35, clearcoat: 0.6 });
+const IRIS=new THREE.MeshPhysicalMaterial({map:irisTexture(),roughness:.50,clearcoat:.11,clearcoatRoughness:.17,envMapIntensity:.48});
 function woodTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g = c.getContext('2d');
   g.fillStyle = '#a77a4a'; g.fillRect(0, 0, 512, 256);
@@ -146,64 +156,86 @@ function woodTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
-// head parts from the reconstruction of the proposal's Fig. 1 (vera_mesh.*), or the earlier SDF shell (vera_head.*)
-const shells = {};
-const LM = { tmj: TMJ.clone(), pitch: PITCH.clone(), yaw: YAW.clone(), eyes: [[EYE.x, EYE.y, EYE.z], [-EYE.x, EYE.y, EYE.z]], eye_r: EYE.r };
-let RECON = false;
-function geoFrom(buf, p) {
-  const q16 = new Uint16Array(buf, p.pos[0], p.nv * 3), n8 = new Int8Array(buf, p.nrm[0], p.nv * 3);
-  const idx = p.index === 'uint16' ? new Uint16Array(buf, p.idx[0], p.nf * 3) : new Uint32Array(buf, p.idx[0], p.nf * 3);
-  const pos = new Float32Array(p.nv * 3), nrm = new Float32Array(p.nv * 3);
-  for (let i = 0; i < p.nv; i++) for (let k = 0; k < 3; k++) { pos[3 * i + k] = p.lo[k] + q16[3 * i + k] * p.scale[k]; nrm[3 * i + k] = n8[3 * i + k] / 127; }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1));
-  if (p.col) g.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(buf, p.col[0], p.nv * 3), 3, true));
-  g.computeBoundingSphere(); return g;
-}
-const RM = {   // materials for the reconstructed surfaces (all fade in the X-ray view); vertex colors carry the figure's detail
-  white: () => xrayify(new THREE.MeshPhysicalMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.38, clearcoat: 0.55, clearcoatRoughness: 0.22, envMapIntensity: 0.55 })),
-  metal: () => xrayify(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, metalness: 1.0, roughness: 0.3, envMapIntensity: 1.25 })),
-  dark: () => xrayify(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, metalness: 0.3, roughness: 0.5 })),
-  blue: () => xrayify(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.5 })),
-  core: () => xrayify(new THREE.MeshStandardMaterial({ color: '#000000', roughness: 1, metalness: 0, envMapIntensity: 0 })),
+// The face, crown and jaw are finished, individually trimmed solids. Decode
+// the sculpted surfaces without bringing the production model into the browser.
+const header = await getJSON('data/vera_panels.json');
+const loadPanels = async () => {
+  const r = await fetch('data/vera_panels.bin'); if (!r.ok) throw new Error('Panel bundle missing');
+  return r.arrayBuffer();
 };
-const inside = new THREE.MeshBasicMaterial({ color: '#15191c', side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 8 });   // what a cut reveals: a dark inside (pushed back so it never fights the outer shell)
-try {
-  const hdr = await getJSON('data/vera_mesh.json');
-  const rb = await fetch('data/vera_mesh.bin'); if (!rb.ok) throw new Error('vera_mesh.bin');
-  const buf = await rb.arrayBuffer();
-  RECON = true;
-  if (hdr.landmarks) {
-    const L = hdr.landmarks;
-    for (const k of ['tmj', 'pitch', 'yaw']) if (L[k]) LM[k] = new THREE.Vector3(...L[k]);
-    if (L.eyes) LM.eyes = L.eyes; if (L.eye_r) LM.eye_r = L.eye_r; if (L.base_y != null) LM.base_y = L.base_y; if (L.seams) LM.seams = L.seams; if (L.screws) LM.screws = L.screws;
+const panelBuffer = await loadPanels();
+const LM = header.landmarks;
+TMJ.fromArray(LM.tmj); PITCH.fromArray(LM.pitch); YAW.fromArray(LM.yaw);
+EYE.x=Math.abs(LM.eyes[0][0]); EYE.y=LM.eyes[0][1]; EYE.z=LM.eyes[0][2]; EYE.r=LM.eye_r;
+ground.position.set(0,LM.base_y-.012,YAW.z);
+const ceramic = (color, opts={}) => xrayify(new THREE.MeshPhysicalMaterial({color,roughness:.46,
+  clearcoat:.17,clearcoatRoughness:.33,envMapIntensity:.72,...opts}));
+const finishes = {ivory:ceramic('#e4e0d7'),tinted:ceramic('#ffffff',{vertexColors:true}),
+  graphite:xrayify(new THREE.MeshStandardMaterial({color:'#34312d',roughness:.76,side:THREE.DoubleSide})),
+  cavity:xrayify(new THREE.MeshStandardMaterial({color:'#211e1c',roughness:.97,envMapIntensity:.14,side:THREE.DoubleSide})),
+  lid:ceramic('#d6d1c7',{metalness:.18}),satin:ceramic('#a5a49f',{metalness:.74,roughness:.36})};
+// A fine, mipmapped mould texture stays in each panel's local coordinates.
+function mouldTexture() {
+  const size=128, pixels=new Uint8Array(size*size*4);
+  let seed=91477;
+  for(let i=0;i<pixels.length;i+=4) {
+    seed=(1664525*seed+1013904223)>>>0;
+    const g=seed>>>24;
+    pixels.set([g,g,g,255],i);
   }
-  const mats = {};
-  for (const [part, subs] of Object.entries(hdr.parts)) {
-    const g = new THREE.Group(); g.name = part;
-    for (const sub of subs) {
-      const geo = geoFrom(buf, sub), mat = mats[sub.mat] || (mats[sub.mat] = RM[sub.mat] ? RM[sub.mat]() : RM.white());
-      const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = sub.mat !== 'white'; m.renderOrder = 5; g.add(m);
-      if (part === 'P1' || part === 'P3') { const b = new THREE.Mesh(geo, inside); b.renderOrder = 4; g.add(b); }
-    }
-    shells[part] = g;
-  }
-  shells.mats = Object.values(mats);
-} catch (e) {
-  const hdr = await getJSON('data/vera_head.json'), buf = await (await fetch('data/vera_head.bin')).arrayBuffer();
-  for (const [name, p] of Object.entries(hdr.parts)) { const m = new THREE.Mesh(geoFrom(buf, p), name === 'P3' ? M.chin : M.shell); m.castShadow = true; m.renderOrder = 5; shells[name] = m; }
-  shells.mats = [M.shell, M.chin];
+  const tex=new THREE.DataTexture(pixels,size,size);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.magFilter=THREE.LinearFilter;tex.minFilter=THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps=true;tex.needsUpdate=true;return tex;
 }
-TMJ.copy(LM.tmj); PITCH.copy(LM.pitch); YAW.copy(LM.yaw);
-if (LM.base_y != null) setGround(LM.base_y);
-EYE.x = Math.abs(LM.eyes[0][0]); EYE.y = LM.eyes[0][1]; EYE.z = LM.eyes[0][2]; EYE.r = LM.eye_r;
+const mould=mouldTexture();
+for(const finish of [finishes.ivory,finishes.tinted,finishes.lid,finishes.satin]) {
+  const xray=finish.onBeforeCompile;
+  finish.onBeforeCompile=(shader,renderer)=>{
+    xray(shader,renderer);shader.uniforms.mouldMap={value:mould};
+    shader.vertexShader=shader.vertexShader
+      .replace('#include <common>','#include <common>\nattribute float ambient; varying float vAmbient; varying vec3 vMould; varying vec3 vPrintN;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvAmbient=ambient; vMould=position; vPrintN=normal;');
+    shader.fragmentShader=shader.fragmentShader
+      .replace('#include <common>','#include <common>\nuniform sampler2D mouldMap; varying float vAmbient; varying vec3 vMould; varying vec3 vPrintN;')
+      .replace('#include <color_fragment>',`#include <color_fragment>
+        vec3 weights=pow(abs(vPrintN),vec3(4.0));weights/=max(dot(weights,vec3(1.0)),.001);
+        vec3 coord=vMould*.44;
+        float grain=dot(weights,vec3(texture2D(mouldMap,coord.yz).r,texture2D(mouldMap,coord.xz).r,texture2D(mouldMap,coord.xy).r))-.5;
+        diffuseColor.rgb*=mix(.42,1.0,vAmbient)*(1.0+.11*grain);`)
+      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+.12*grain,.12,1.0);');
+  };
+  finish.customProgramCacheKey=()=>'vera-print-v1';
+}
+const shells = {mats:Object.values(finishes)};
+const linearRGB=Float32Array.from({length:256},(_,i)=>{const c=i/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});
+for (const [family, panels] of Object.entries(header.parts)) {
+  const assembly = new THREE.Group(); assembly.name=family;
+  for (const p of panels) {
+    const packed = new Uint16Array(panelBuffer,p.pos[0],3*p.nv), positions=new Float32Array(packed.length);
+    for(let i=0;i<packed.length;i++) positions[i]=p.lo[i%3]+packed[i]*p.scale[i%3];
+    const geom=new THREE.BufferGeometry(); geom.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    geom.setAttribute('normal',new THREE.BufferAttribute(new Int16Array(panelBuffer,p.nrm[0],3*p.nv),3,true));
+    const Index=p.index==='uint16'?Uint16Array:Uint32Array;
+    geom.setIndex(new THREE.BufferAttribute(new Index(panelBuffer,p.idx[0],3*p.nf),1));
+    if(p.ao) geom.setAttribute('ambient',new THREE.BufferAttribute(new Uint8Array(panelBuffer,p.ao[0],p.nv),1,true));
+    if(p.col) {
+      const rgb=new Uint8Array(panelBuffer,p.col[0],p.nv*3), colors=new Float32Array(rgb.length);
+      for(let i=0;i<rgb.length;i++) colors[i]=linearRGB[rgb[i]];
+      geom.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    }
+    const panel=new THREE.Mesh(geom,finishes[p.mat]); panel.name=p.name;
+    panel.castShadow=true;panel.receiveShadow=p.mat!=='cavity' && p.mat!=='graphite';assembly.add(panel);
+  }
+  shells[family]=assembly;
+}
 
 // ------------------------------------------------------------------------------------------------ hierarchy: base -> J1 -> yoke -> J2 -> head -> J5
 const root = new THREE.Group(); scene.add(root);
 const baseG = new THREE.Group(); root.add(baseG);
 const yawG = new THREE.Group(); yawG.position.copy(YAW); baseG.add(yawG);
 const yokeG = new THREE.Group(); yawG.add(yokeG);
-const pitchG = new THREE.Group(); pitchG.position.set(0, PITCH.y - YAW.y, 0); yawG.add(pitchG);
+const pitchG = new THREE.Group(); pitchG.position.set(0, PITCH.y - YAW.y, PITCH.z - YAW.z); yawG.add(pitchG);
 const headG = new THREE.Group(); headG.position.set(0, -PITCH.y, -PITCH.z); pitchG.add(headG);   // children use the head frame directly
 const jawPivot = new THREE.Group(); jawPivot.position.copy(TMJ); headG.add(jawPivot);
 const jawG = new THREE.Group(); jawG.position.set(-TMJ.x, -TMJ.y, -TMJ.z); jawPivot.add(jawG);
@@ -227,31 +259,8 @@ function setBar(m, a, b, r) {   // reuse a unit cylinder mesh as a rod from a to
   m.position.copy(a).addScaledVector(d, 0.5); m.scale.set(r, L, r); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.multiplyScalar(1 / L));
 }
 
-// base P7 and the yaw stage (J1)
-const P7 = new THREE.Group(); baseG.add(P7);
-mesh(new THREE.CylinderGeometry(7.4, 8.0, 2.1, 72), M.base, P7, { pos: [0, -11.5, -10.1] });
-mesh(new THREE.TorusGeometry(7.42, 0.16, 12, 96), M.metal, P7, { pos: [0, -10.45, -10.1], rot: [Math.PI / 2, 0, 0] });
-mesh(new THREE.TorusGeometry(8.0, 0.12, 10, 96), M.metal, P7, { pos: [0, -12.55, -10.1], rot: [Math.PI / 2, 0, 0] });
-for (let k = 0; k < 3; k++) mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.05, 20), M.dark, P7, { pos: [Math.cos(k * 2.09 + 0.4) * 5.6, -10.43, -10.1 + Math.sin(k * 2.09 + 0.4) * 5.6] }); // microphone grilles
-mesh(rbox(1.6, 0.6, 1.1, 0.2), M.dark, P7, { pos: [0, -12.2, -17.9] });                   // cable notch
-mesh(new THREE.CylinderGeometry(4.3, 4.3, 0.42, 64), M.metal, yawG, { pos: [0, 0.22, 0] }); // turntable
-// pitch yoke P6
-const P6 = new THREE.Group(); yokeG.add(P6);
-mesh(rbox(15.2, 1.0, 4.2, 0.35), M.print, P6, { pos: [0, 0.95, 0] });
-for (const s of [1, -1]) {
-  mesh(rbox(1.0, 13.6, 3.3, 0.35), M.print, P6, { pos: [s * 7.1, 0.45 + 6.8, 0] });
-  mesh(new THREE.CylinderGeometry(1.25, 1.25, 1.25, 32), M.metal, P6, { pos: [s * 7.1, PITCH.y - YAW.y, 0], rot: [0, 0, Math.PI / 2] });   // bearings
-  mesh(rbox(1.6, 0.5, 3.0, 0.2), M.print, P6, { pos: [s * 6.6, 1.7, 0] });
-}
-mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.32, 32), M.metal, P6, { pos: [6.45, PITCH.y - YAW.y, 0], rot: [0, 0, Math.PI / 2] });   // XM430 horn, on the yoke
-if (RECON) { P6.visible = false; P7.visible = false; }
-// cables down the yoke
-{
-  const c1 = new THREE.CatmullRomCurve3([[6.6, 12.2, -1.0], [6.0, 8, -1.6], [6.4, 3, -1.4], [5.2, 1.4, -0.8], [2.0, 0.4, -0.4], [0, -0.6, 0]].map((p) => new THREE.Vector3(...p)));
-  mesh(new THREE.TubeGeometry(c1, 60, 0.17, 8), M.cable, P6);
-  const c2 = new THREE.CatmullRomCurve3([[-6.6, 12.0, -1.1], [-6.1, 8, -1.5], [-6.4, 3, -1.2], [-5.0, 1.3, -0.6], [-1.6, 0.3, -0.2], [0, -0.6, 0.1]].map((p) => new THREE.Vector3(...p)));
-  mesh(new THREE.TubeGeometry(c2, 60, 0.15, 8), M.cable2, P6);
-}
+const P7=new THREE.Group();P7.name='P7';baseG.add(P7);
+const P6=new THREE.Group();P6.name='P6';yokeG.add(P6);
 
 // carrier P5 (inside the head), pitch shaft and servo
 const P5 = new THREE.Group(); mechG.add(P5);
@@ -264,52 +273,47 @@ const P5 = new THREE.Group(); mechG.add(P5);
   mesh(new THREE.CylinderGeometry(0.36, 0.36, 13.2, 16), M.metal, P5, { pos: [0, PITCH.y, PITCH.z], rot: [0, 0, Math.PI / 2] });   // pitch shaft
   mesh(rbox(3.4, 4.65, 2.85, 0.3), M.dark, P5, { pos: [4.65, PITCH.y + 0.85, PITCH.z] });                                       // XM430, pitch
   mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.12, 24), M.metal, P5, { pos: [-6.05, PITCH.y, PITCH.z], rot: [0, 0, Math.PI / 2] }); // the other side's hub
+  // Electronics housing behind the upper temple; the ear bay opens onto its
+  // shaded carrier and the two real printed shrouds.
+  mesh(rbox(7.75, 3.30, 6.15, .63), M.dark, P5, {pos:[0,9.27,-10.40]});
   mesh(rbox(2.4, 1.6, 0.5, 0.15), M.dark, P5, { pos: [0, EYE.y + 2.75, EYE.z - 5.15] });                                          // camera board
   mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.1, 20), M.dark, P5, { pos: [0, EYE.y + 2.75, EYE.z - 4.5], rot: [Math.PI / 2, 0, 0] });
 }
-if (RECON) {
-  headG.add(shells.P1, shells.P2); jawG.add(shells.P3);
-  if (LM.screws) {   // screws on the plates (pan head with a hex socket), as on the figure
-    const head = new THREE.CylinderGeometry(0.2, 0.22, 0.08, 24), sock = new THREE.CylinderGeometry(0.085, 0.085, 0.09, 6);
-    const mH = xrayify(new THREE.MeshStandardMaterial({ color: '#b9bfc6', metalness: 1, roughness: 0.25 })), mS = xrayify(new THREE.MeshStandardMaterial({ color: '#1a1d20', roughness: 0.6 }));
-    shells.mats.push(mH, mS);
-    for (const sc_ of LM.screws) {
-      const g = new THREE.Group(), n = new THREE.Vector3(...sc_.n).normalize();
-      g.position.set(...sc_.p); g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
-      const h = new THREE.Mesh(head, mH); h.position.y = 0.03; const k = new THREE.Mesh(sock, mS); k.position.y = 0.04;
-      g.add(h, k); (shells[sc_.part] || shells.P1).add(g);
-    }
+headG.add(shells.P1,shells.P2);jawG.add(shells.P3);P5.name='P5';
+// The oral recess has a fixed upper edge and a lower occlusal edge carried by P3.
+const mouthBox=new THREE.Group();headG.add(mouthBox);
+const mouthLower=new THREE.Group();jawG.add(mouthLower);
+const oralLiner=new THREE.MeshStandardMaterial({color:'#25201f',roughness:.85});
+const ceramicEdge=new THREE.MeshStandardMaterial({color:'#b6a99a',roughness:.57});
+const recess=mesh(new THREE.SphereGeometry(1,48,28),oralLiner,mouthBox,{pos:[0,-2.05,-2.78],shadow:false});
+recess.scale.set(3.60,1.80,1.12);
+// Behind the lip edges, short, separate occlusal pads follow the dental arc.
+for(const [g,lower] of [[mouthBox,false],[mouthLower,true]]) {
+  for(let i=0;i<8;i++) {
+    const x=(i-3.5)*.50, arch=x*x;
+    const pad=mesh(rbox(.48,.26,.51,.09),ceramicEdge,g,
+      {pos:[x,(lower?-1.31:-1.03)+.014*arch,-.06-.138*arch]});
+    pad.rotation.y=.27*x;pad.receiveShadow=true;
   }
-  if (LM.seams) {
-    const seamMat = xrayify(new THREE.MeshStandardMaterial({ color: '#0d0f11', roughness: 0.7 }));
-    shells.mats.push(seamMat);
-    for (const run of LM.seams) {
-      if (run.length < 4) continue;
-      const pts = run.map((p) => new THREE.Vector3(...p)), z = pts[Math.floor(pts.length / 2)].z, closed = pts[0].distanceTo(pts[pts.length - 1]) < 0.3;
-      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), Math.max(8, pts.length * 2), 0.06, 6, closed);
-      const m = new THREE.Mesh(geo, seamMat); m.renderOrder = 6; (z >= -6.8 ? shells.P1 : shells.P2).add(m);
-    }
-  }
-  if (shells.neck) { const n = new THREE.Group(); n.position.set(-YAW.x, -YAW.y, -YAW.z); n.add(shells.neck); yawG.add(n); }
-  if (shells.base) baseG.add(shells.base);
-} else { headG.add(shells.P1, shells.P2); jawG.add(shells.P3); }
-// a dark mouth cavity behind the lips (face view only)
-const mouthBox = mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.MeshStandardMaterial({ color: '#16191c', roughness: 0.9 }), headG, { pos: [0, -1.85, -1.4], shadow: false });
-mouthBox.scale.set(2.05, 0.95, 1.35);
-if (RECON) { mouthBox.position.set(0, -1.75, -1.55); mouthBox.scale.set(2.55, 1.25, 1.7); }
-// jaw support P4: U bracket on the hinge pins, rocker lever, chin plate
-const P4 = new THREE.Group(); jawG.add(P4);
-{
-  const pts = [[4.3, 1.1, -8.4], [4.45, -0.9, -6.6], [3.7, -3.4, -3.9], [2.2, -4.75, -2.6], [0, -4.95, -2.35], [-2.2, -4.75, -2.6], [-3.7, -3.4, -3.9], [-4.45, -0.9, -6.6], [-4.3, 1.1, -8.4]];
-  mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 90, 0.34, 10), M.print, P4);
-  for (const s of [1, -1]) mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.4, 20), M.metal, P4, { pos: [s * 4.3, 1.1, -8.4], rot: [0, 0, Math.PI / 2] });
-  mesh(rbox(2.6, 0.4, 1.6, 0.15), M.print, P4, { pos: [0, -4.75, -1.7] });
 }
+// jaw support P4: U bracket on the hinge pins, rocker lever, chin plate
+const P4 = new THREE.Group(); P4.name='P4'; jawG.add(P4);
+{
+  const pts = [[4.3, TMJ.y, TMJ.z], [4.37, -1.85, -5.48], [3.7, -2.94, -4.0], [2.2, -4.06, -2.73], [0, -4.22, -2.49], [-2.2, -4.06, -2.73], [-3.7, -2.94, -4.0], [-4.37, -1.85, -5.48], [-4.3, TMJ.y, TMJ.z]];
+  mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 90, 0.34, 10), M.print, P4);
+  for (const s of [1, -1]) mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.4, 20), M.metal, P4, { pos: [s * 4.3, TMJ.y, TMJ.z], rot: [0, 0, Math.PI / 2] });
+  mesh(rbox(2.6, 0.4, 1.6, 0.15), M.print, P4, { pos: [0, -4.08, -1.87] });
+}
+const hardware=buildHardware({base:P7,yoke:P6,yawStage:yawG,carrier:P5,jaw:P4,pitch:PITCH,yaw:YAW,tmj:TMJ,
+  groundY:LM.base_y,shellGroups:shells,screws:LM.screws});
+MECH.push(...hardware.fade, M.sclera, IRIS, oralLiner);
+for(const m of hardware.skin) shells.mats.push(xrayify(m));
+
 const LEVER = { r: 1.6, a0: 135 * DEG, x: 4.6 };   // rocker lever on P4 (in the Z-Y plane at x)
 const lever = new THREE.Mesh(unitCyl, M.print); P4.add(lever);
 { const a = new THREE.Vector3(LEVER.x, TMJ.y, TMJ.z), b = new THREE.Vector3(LEVER.x, TMJ.y + LEVER.r * Math.sin(LEVER.a0), TMJ.z + LEVER.r * Math.cos(LEVER.a0)); setBar(lever, a, b, 0.22); }
 // jaw servo + crank + coupler (four-bar, solved every frame)
-const CRANK = { S: new THREE.Vector2(-11.25, 2.0), r: 1.0, x: 4.6 };    // (Z, Y) of the servo shaft
+const CRANK = { S: new THREE.Vector2(TMJ.z-2.85, TMJ.y+.90), r: 1.0, x: 4.6 };    // (Z, Y) of the servo shaft
 mesh(rbox(2.6, 2.0, 3.4, 0.22), M.dark, mechG, { pos: [CRANK.x - 1.65, CRANK.S.y, CRANK.S.x] });   // XL330
 mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.2, 20), M.metal, mechG, { pos: [CRANK.x - 0.25, CRANK.S.y, CRANK.S.x], rot: [0, 0, Math.PI / 2] });
 const crank = new THREE.Mesh(unitCyl, M.metal), coupler = new THREE.Mesh(unitCyl, M.metal); mechG.add(crank, coupler);
@@ -334,20 +338,19 @@ solveCrank(0);
 
 // eyes (J3 common yaw, J4 common pitch; each about its own centre), lids, linkage
 const eyes = [];
-const irisCap = new THREE.SphereGeometry(EYE.r + 0.004, 48, 10, 0, Math.PI * 2, 0, 0.6); irisCap.rotateX(Math.PI / 2);
-const corneaCap = new THREE.SphereGeometry(EYE.r + 0.06, 48, 12, 0, Math.PI * 2, 0, 0.72); corneaCap.rotateX(Math.PI / 2);
-const lidGeo = new THREE.SphereGeometry(EYE.r + 0.08, 40, 14, 0, Math.PI * 2, 0, 1.18);
-for (const s of [1, -1]) {
-  const g = new THREE.Group(); g.position.set(s * EYE.x, EYE.y, EYE.z + (RECON ? 0.12 : 0)); mechG.add(g);
-  const ball = new THREE.Group(); g.add(ball);
-  mesh(new THREE.SphereGeometry(EYE.r, 48, 32), M.sclera, ball);
-  mesh(irisCap, IRIS, ball, { shadow: false });
-  mesh(corneaCap, M.cornea, ball, { shadow: false });
-  mesh(rbox(0.3, 0.3, 1.9, 0.1), M.metal, ball, { pos: [0, 0, -1.9] });
-  const lidPivot = new THREE.Group(); g.add(lidPivot);
-  const lid = mesh(lidGeo, M.shell, lidPivot, { shadow: false }); lid.renderOrder = 4;
-  mesh(new THREE.TorusGeometry(EYE.r + 0.22, 0.08, 8, 48, Math.PI * 1.3), M.print, g, { pos: [0, 0, -0.4], rot: [0, 0, -0.65 * Math.PI + Math.PI / 2] });   // gimbal yoke
-  eyes.push({ g, ball, lidPivot });
+const irisCap=new THREE.SphereGeometry(EYE.r+.008,72,22,0,Math.PI*2,0,.52);irisCap.rotateX(Math.PI/2);
+for(const side of [-1,1]) {
+  const g=new THREE.Group();g.position.set(side*EYE.x,EYE.y,EYE.z);mechG.add(g);
+  const ball=new THREE.Group();g.add(ball);
+  const cup=mesh(new THREE.SphereGeometry(1,48,30),oralLiner,g,{pos:[0,0,-.82]});cup.scale.set(2.13,1.80,1.04);
+  const globe=mesh(new THREE.SphereGeometry(EYE.r,64,48),M.sclera,ball,{shadow:false});globe.receiveShadow=true;
+  const iris=mesh(irisCap,IRIS,ball,{shadow:false});iris.receiveShadow=true;
+  const glintMat=new THREE.MeshBasicMaterial({color:'#fffdf7',transparent:true,opacity:.77,toneMapped:false});
+  const specular=mesh(new THREE.SphereGeometry(1,16,12),glintMat,g,{pos:[-.37,.39,Math.sqrt(EYE.r**2-.37**2-.39**2)+.026],shadow:false});
+  specular.scale.set(.097,.134,.028);specular.rotation.z=-.32;
+  mesh(rbox(.3,.3,1.9,.1),M.metal,ball,{pos:[0,0,-1.9]});
+  const gimbal=mesh(new THREE.TorusGeometry(EYE.r+.06,.07,12,64),M.print,g,{pos:[0,0,-1.39]});
+  gimbal.scale.y=.94;eyes.push({g,ball});
 }
 const tieRod = new THREE.Mesh(unitCyl, M.metal), eyeLinkY = new THREE.Mesh(unitCyl, M.metal), eyeLinkP = new THREE.Mesh(unitCyl, M.metal); mechG.add(tieRod, eyeLinkY, eyeLinkP);
 const EYE_SERVO_Y = [EYE.y + 1.65, EYE.y - 1.45], EYE_SERVO_Z = EYE.z - 4.4;
@@ -494,8 +497,8 @@ const TAGS = [
   { id: 'P3', text: 'P3 chin panel', cls: '', obj: shells.P3, at: [0, -4.6, 1.2] },
   { id: 'P4', text: 'P4 jaw support', cls: '', obj: P4, at: [-4.3, -2.0, -5.4] },
   { id: 'P5', text: 'P5 carrier', cls: '', obj: P5, at: [-3.6, 8.2, -10.4] },
-  { id: 'P6', text: RECON ? 'neck + P6 yoke' : 'P6 pitch yoke', cls: '', obj: RECON ? baseG : P6, at: RECON ? [-4.6, YAW.y + 3.2, YAW.z + 1.5] : [-7.1, 4.0, 0] },
-  { id: 'P7', text: 'P7 base', cls: '', obj: baseG, at: RECON ? [0, YAW.y - 1.6, YAW.z + 7.6] : [0, -11.5, -2.2] },
+  { id: 'P6', text: 'P6 pitch yoke', cls: '', obj: P6, at: [-3.8,3.5,0] },
+  { id: 'P7', text: 'P7 base', cls: '', obj:P7, at:[0,LM.base_y+1.1,YAW.z+6.6] },
 ];
 const tagLayer = $('#tags');
 for (const t of TAGS) { t.el = document.createElement('div'); t.el.className = 'tag ' + t.cls; t.el.textContent = t.text; t.el.hidden = true; tagLayer.appendChild(t.el); }
@@ -503,10 +506,14 @@ for (const t of TAGS) { t.el = document.createElement('div'); t.el.className = '
 // ------------------------------------------------------------------------------------------------ views: face / X-ray / mechanism
 const view = { mode: 'face', x: 0, xT: 0, mech: 1, mechT: 1, tract: 0, tractT: 0, explode: 0, explodeT: 0 };
 function setView(mode) {
+  if(mode!==view.mode){
+    flatBox.hidden=mode!=='xray';
+    $('#flat-btn').setAttribute('aria-pressed',String(!flatBox.hidden));
+  }
   view.mode = mode;
   view.xT = mode === 'face' ? 0 : 1;
   view.tractT = mode === 'xray' ? 1 : 0;
-  view.mechT = mode === 'xray' ? 0.22 : 1;
+  view.mechT = mode === 'xray' ? 0.045 : 1;
   for (const [id, m] of [['#v-face', 'face'], ['#v-xray', 'xray'], ['#v-mech', 'mech']]) $(id).setAttribute('aria-pressed', String(mode === m));
   $('#explode').hidden = mode !== 'mech';
   AXES.forEach((a) => { a.visible = mode === 'mech'; });
@@ -530,7 +537,7 @@ async function fetchAudio(url) {   // plain mp3 beside the page
   const r = await fetch(url); if (!r.ok) throw new Error(url); return r.arrayBuffer();
 }
 class Player {
-  constructor() { this.ctx = null; this.buf = new Map(); this.raw = new Map(); this.src = null; this.gain = null; this.url = null; this.t0 = 0; this.off = 0; this.playing = false; this.dur = 0; this.onend = null; }
+  constructor() { this.ctx = null; this.buf = new Map(); this.raw = new Map(); this.src = null; this.gain = null; this.url = null; this.t0 = 0; this.off = 0; this.playing = false; this.starting = false; this.revision = 0; this.dur = 0; this.onstart = null; this.onend = null; }
   ensure() {
     if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -545,26 +552,31 @@ class Player {
   }
   time() { if (FAKE && this.playing) return clamp((performance.now() / 1000) - this.f0, 0, this.dur); return this.playing ? clamp(this.ctx.currentTime - this.t0, 0, this.dur) : this.off; }
   async play(url, from = this.off) {
-    this.ensure(); const b = await this.buffer(url); const ctx = this.ctx;
+    const revision=++this.revision;
+    this.starting=true; this.ensure();
+    let b;
+    try { b=await this.buffer(url); }
+    catch(error) { if(revision!==this.revision) return false; this.starting=false; throw error; }
+    if(revision!==this.revision) return false;
+    this.starting=false; const ctx=this.ctx;
     this.stopSrc();
     const g = ctx.createGain(), s = ctx.createBufferSource(); s.buffer = b; s.connect(g); g.connect(ctx.destination);
     const now = ctx.currentTime + 0.03, at = clamp(from, 0, Math.max(b.duration - 0.05, 0));
     g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(1, now + 0.03);
     s.start(now, at); this.src = s; this.gain = g; this.url = url; this.t0 = now - at; this.f0 = performance.now() / 1000 - at; this.dur = b.duration; this.playing = true;
-    if (this.music) {
-      const mb = await this.buffer(this.music);
-      if (this.src === s) { const mg = ctx.createGain(), ms = ctx.createBufferSource(); ms.buffer = mb; ms.connect(mg); mg.connect(ctx.destination);
-        mg.gain.setValueAtTime(0, now); mg.gain.linearRampToValueAtTime(0.55, now + 0.05); ms.start(Math.max(now, ctx.currentTime), at); this.msrc = ms; this.mgain = mg; }
-    }
     s.onended = () => { if (this.src === s) { this.playing = false; this.off = 0; this.src = null; this.onend && this.onend(); } };
+    this.onstart?.();
+    return true;
   }
-  pause() { if (!this.playing) return; this.off = this.time(); this.stopSrc(); this.playing = false; }
+  pause() { ++this.revision; this.starting=false; if (!this.playing) return; this.off = this.time(); this.stopSrc(); this.playing = false; }
   stopSrc() {
-    if (this.msrc) { const ms = this.msrc, mg = this.mgain, n = this.ctx.currentTime; mg.gain.cancelScheduledValues(n); mg.gain.setValueAtTime(mg.gain.value, n); mg.gain.linearRampToValueAtTime(0, n + 0.04); ms.stop(n + 0.05); this.msrc = null; }
     if (!this.src) return; const s = this.src, g = this.gain, now = this.ctx.currentTime; this.src = null;
     g.gain.cancelScheduledValues(now); g.gain.setValueAtTime(g.gain.value, now); g.gain.linearRampToValueAtTime(0, now + 0.03); s.onended = null; s.stop(now + 0.04);
   }
-  async swap(url) { if (this.playing && url !== this.url) await this.play(url, this.time()); else this.url = url; }
+  async swap(url) {
+    if(this.starting || (this.playing && url!==this.url)) { await this.play(url,this.time()); }
+    else this.url=url;
+  }
   seek(t) { if (this.playing) this.play(this.url, t); else this.off = t; }
 }
 const player = new Player();
@@ -596,7 +608,6 @@ async function applyVariant() {
   const v = variant(); if (!v) return;
   S.ema = v.ema; S.cues = veraCues(S.clip, v.ema); player.prefetch(v.url);
   await player.swap(v.url);
-  if (!player.playing) player.url = v.url;
   renderScoreStatic(); updateCaptions();
 }
 function setLoad(k) {
@@ -607,11 +618,6 @@ function setLoad(k) {
   if (k === 'gum' && view.mode === 'face') hint(true, 'Gum → X-ray');
   applyVariant();
 }
-S.music = true;
-const musicBtn = $('#music-btn');
-musicBtn.onclick = () => { S.music = !S.music; musicBtn.setAttribute('aria-pressed', String(S.music)); setMusic(); if (player.playing) player.play(player.url, player.time()); };
-function setMusic() { const c = S.clip; player.music = c && c.audio && c.audio.music && S.music ? c.audio.music : null; if (player.music) player.prefetch(player.music); musicBtn.hidden = !(c && c.audio && c.audio.music); }
-
 const fmtPct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 function updateCaptions() {
   const c = S.clip; if (!c) return;
@@ -661,7 +667,7 @@ $('#t-song').onclick = () => setKind('song');
 
 let loadSeq = 0;
 async function loadClip(id) {
-  const seq = ++loadSeq; const was = player.playing; player.pause(); player.off = 0;
+  const seq = ++loadSeq; const was = player.playing || player.starting; player.pause(); player.off = 0;
   const c = await getClip(id); if (seq !== loadSeq) return;
   S.clip = c; S.t = 0; if (c.kind !== 'speech') { S.load = null; for (const p of Object.keys(SHELF)) props[p].visible = false; for (const b of shelf.children) b.setAttribute('aria-pressed', 'false'); }
   renderClipList();
@@ -670,8 +676,8 @@ async function loadClip(id) {
   else say.textContent = c.text;
   $('#who').textContent = c.speaker || '';
   renderPlanCard(c);
-  player.prefetch(c.audio.ours); player.prefetch(c.audio.orig); setMusic();
-  await applyVariant();
+  player.prefetch(c.audio.orig);
+  await applyVariant(); if(seq!==loadSeq) return;
   $('#scoremeta').textContent = `${c.gestures.length} gestures · ${c.dur.toFixed(2)} s`;
   if (was) play();
 }
@@ -681,12 +687,13 @@ const ICON = { play: 'M7 4.5v15l13-7.5z', pause: 'M6.5 4.5h4v15h-4zM13.5 4.5h4v1
 function setPlayIcon(p) { $('#play-icon').setAttribute('d', p ? ICON.pause : ICON.play); $('#play').setAttribute('aria-label', p ? 'Pause' : 'Play'); }
 async function play() {
   const v = variant(); if (!v) return;
-  try { await player.play(v.url, player.off); setPlayIcon(true); $('#playcap').textContent = ''; }
+  try { await player.play(v.url, player.off); }
   catch (e) { $('#playcap').textContent = 'No sound in this browser.'; }
   hint(false);
 }
+player.onstart = () => { setPlayIcon(true); $('#playcap').textContent = ''; };
 player.onend = () => { setPlayIcon(false); S.anim = { yield: 0 }; };
-$('#play').onclick = () => { if (player.playing) { player.pause(); setPlayIcon(false); } else play(); };
+$('#play').onclick = () => { if (player.playing || player.starting) { player.pause(); setPlayIcon(false); } else play(); };
 addEventListener('keydown', (e) => { if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); $('#play').click(); } });
 
 // ------------------------------------------------------------------------------------------------ per-frame posture
@@ -883,8 +890,10 @@ canvas.addEventListener('pointermove', (e) => { const r = canvas.getBoundingClie
 const eyeMid = new THREE.Vector3(0, EYE.y, EYE.z);
 function updateGaze(dt, time) {
   // where to look: the pointer when it moved recently, else the viewer (the camera)
-  if (time - gaze.lastPointer < 2.5) { ray.setFromCamera(pointer, camera); gaze.target.copy(ray.ray.origin).addScaledVector(ray.ray.direction, camera.position.distanceTo(eyeMid) * 0.8); }
-  else if (view.mode === 'face') gaze.target.copy(camera.position);   // attend to the viewer
+  const attend=player.playing && S.cues?.gazeEvents.some(e => S.t >= e.t0 && S.t < e.t1);
+  if (attend) gaze.target.set(12,7,120);
+  else if (time - gaze.lastPointer < 2.5 && view.mode === 'face') { ray.setFromCamera(pointer, camera); gaze.target.copy(ray.ray.origin).addScaledVector(ray.ray.direction, camera.position.distanceTo(eyeMid) * 0.8); }
+  else if (view.mode === 'face') gaze.target.set(12,14,110);
   else gaze.target.set(0, 4.5, 140);                                       // a partner straight ahead, so the profile stays readable
   const v = gaze.target.clone().sub(eyeMid);
   const yawT = clamp(Math.atan2(v.x, v.z), -1.0, 1.0), pitchT = clamp(Math.atan2(v.y, Math.hypot(v.x, v.z)), -0.5, 0.5);
@@ -892,9 +901,7 @@ function updateGaze(dt, time) {
   const kN = 1 - Math.exp(-dt / 0.65), kE = 1 - Math.exp(-dt / 0.06);
   gaze.neckYaw += (0.55 * yawT - gaze.neckYaw) * kN; gaze.neckPitch += (0.35 * pitchT - gaze.neckPitch) * kN;
   gaze.eyeYaw += (clamp(yawT - gaze.neckYaw, -0.42, 0.42) - gaze.eyeYaw) * kE; gaze.eyePitch += (clamp(pitchT - gaze.neckPitch, -0.3, 0.3) - gaze.eyePitch) * kE;
-  // blink (linked lids) every few seconds
-  gaze.nextBlink -= dt; if (gaze.nextBlink <= 0) { gaze.blink = 1; gaze.nextBlink = 2.2 + Math.random() * 4.2; }
-  if (gaze.blink > 0) gaze.blink = Math.max(gaze.blink - dt / 0.2, 0);
+
 }
 
 // ------------------------------------------------------------------------------------------------ main loop
@@ -904,6 +911,10 @@ new IntersectionObserver((es) => { visible = es[0].isIntersecting; }, { threshol
 const ro = new ResizeObserver(() => { const r = stage.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(r.height, 1); camera.updateProjectionMatrix(); renderScoreStatic(); });
 ro.observe(stage); new ResizeObserver(() => renderScoreStatic()).observe($('#scorebox'));
 const tmpV = new THREE.Vector3();
+function setTranslucent(material,on) {
+  if(material.transparent===on && material.depthWrite===!on) return;
+  material.transparent=on;material.depthWrite=!on;material.needsUpdate=true;
+}
 let lastWord = -1;
 function frame() {
   requestAnimationFrame(frame);
@@ -914,17 +925,20 @@ function frame() {
   const k = 1 - Math.exp(-dt / 0.18);
   view.x += (view.xT - view.x) * k; view.tract += (view.tractT - view.tract) * k; view.mech += (view.mechT - view.mech) * k; view.explode += (view.explodeT - view.explode) * k;
   XR.uXray.value = view.x;
-  for (const m of shells.mats) m.depthWrite = view.x < 0.02;
-  inside.visible = view.x < 0.25;
-  for (const m of MECH) { m.opacity = view.mech; m.depthWrite = view.mech > 0.98; }
-  tractG.visible = view.tract > 0.02; mouthBox.visible = view.x < 0.5;
+  for(const m of shells.mats) setTranslucent(m,view.x>.015);
+  for(const m of MECH) { m.opacity=view.mech; setTranslucent(m,view.mech<.985); }
+  // Clear the line of sight from the side to the mid-sagittal articulators.
+  // The shell supplies the outline and J5 still moves with the articulatory cue.
+  const showHardware=view.mode!=='xray' || view.tract<.82;
+  mechG.visible=P4.visible=P6.visible=showHardware;
+  tractG.visible = view.tract > 0.02; mouthLower.visible = mouthBox.visible = view.x < 0.5;
   for (const m of [M.tongue, M.lip, M.bone, M.tooth, M.soft]) m.emissiveIntensity = 0.35 + 0.35 * view.tract;
   for (const d of sensorDots) d.material.opacity = view.tract;
   const ex = view.explode;
   shells.P1.position.set(0, 0, 7.5 * ex); shells.P2.position.set(0, 0, -8 * ex); jawPivot.position.set(TMJ.x, TMJ.y - 5 * ex, TMJ.z + 4.5 * ex);
   P6.position.set(0, -2.6 * ex, 0); P7.position.set(0, -6.5 * ex, 0); yawG.position.set(YAW.x, YAW.y - 6.5 * ex, YAW.z);
-  if (shells.base) shells.base.position.set(0, -6.5 * ex, 0);
-  pitchG.position.set(0, PITCH.y - YAW.y + 6.5 * ex, 0);
+  shells.P3.position.set(0,-.80*ex,2.0*ex);
+  pitchG.position.set(0,PITCH.y-YAW.y+6.5*ex,PITCH.z-YAW.z);
   // posture
   let f = postureAt(t);
   if (f != null) {
@@ -957,7 +971,7 @@ function frame() {
   const yieldNod = 0;
   yawG.rotation.y = reduceMotion ? 0 : gaze.neckYaw;
   pitchG.rotation.x = reduceMotion ? 0 : -gaze.neckPitch + gaze.nod + yieldNod + Math.sin(time * 0.9) * 0.15 * DEG;
-  for (const e of eyes) { e.ball.rotation.set(-gaze.eyePitch, gaze.eyeYaw, 0, 'YXZ'); e.lidPivot.rotation.x = -0.12 + Math.sin(Math.PI * gaze.blink) * 0.98 - gaze.eyePitch * 0.4; }
+  for (const e of eyes) e.ball.rotation.set(-gaze.eyePitch,gaze.eyeYaw,0,'YXZ');
   // eye linkage: tie rod between the two arms' tips, links to the servos
   const tips = eyes.map((e) => e.ball.localToWorld(tmpV.set(0, 0, -2.75)).clone()).map((p) => mechG.worldToLocal(p));
   setBar(tieRod, tips[0], tips[1], 0.11);
@@ -1007,8 +1021,8 @@ new MutationObserver(reTheme).observe(document.documentElement, { attributes: tr
 $('#loading').remove();
 ready = true;
 setKind('speech');
-hint(true, '▶ then X-ray');
+hint(false);
 requestAnimationFrame(frame);
 document.title = document.title;   // keep
 window.__ready = true;
-window.__dbg = { view, S, player, gaze, camera, controls, fly };
+window.__dbg = {view,S,player,gaze,camera,controls,fly,shells,jawPivot,jawG,headG,crank,coupler,lever,eyes,P4,P5,P6,P7,renderer,scene};
