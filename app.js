@@ -579,8 +579,22 @@ let hintT = null;
 function hint(show, text) { const h = $('#hint'); if (text) h.textContent = text; h.classList.toggle('gone', !show); clearTimeout(hintT); if (show) hintT = setTimeout(() => h.classList.add('gone'), 6000); }
 
 // ------------------------------------------------------------------------------------------------ audio: one clock, variants switched in place
-async function fetchAudio(url) {   // plain mp3 beside the page
-  const r = await fetch(url); if (!r.ok) throw new Error(url); return r.arrayBuffer();
+async function fetchAudio(url) {
+  async function bytes(path,options) {
+    const response=await fetch(path,options);
+    if(!response.ok) {
+      const error=new Error(`Audio request failed (${response.status})`);
+      error.status=response.status;throw error;
+    }
+    return response.arrayBuffer();
+  }
+  try { return await bytes(url); }
+  catch(error) {
+    if(error.status && error.status<500 && ![408,429].includes(error.status)) throw error;
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const retry=new URL(url,document.baseURI);retry.searchParams.set('audio-retry','1');
+    return bytes(retry,{cache:'reload'});
+  }
 }
 class Player {
   constructor() { this.ctx = null; this.buf = new Map(); this.raw = new Map(); this.src = null; this.gain = null; this.url = null; this.t0 = 0; this.off = 0; this.playing = false; this.starting = false; this.revision = 0; this.dur = 0; this.onstart = null; this.onend = null; }
