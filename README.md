@@ -2,11 +2,16 @@
 
 Live demo: https://lukewangw.github.io/holdmyjaw-demo/
 
-A speech recording is compressed into a short plan of articulatory gestures (dynamic movement primitives on tract
-variables). Our body model turns the plan into lip, tongue and jaw movements, and the jaw drives J5 of the VERA robot
-face. Head nods and gaze come from the same event layer. Pick a sentence or a song, press play, and open X-ray to see the
-articulators inside the head. Loads (a weight on the jaw, a pen between the teeth, a band, gum, a hand, the table) play
-our own synthesized voice with reflexes on or off, so the compensation can be heard.
+The demo plays the original recording for eight sentences and three sung clips. The lower-left X-ray shows our model’s
+predicted tongue, lip and jaw motion. The gestural score shows the tract-variable gestures that drive the body model.
+The motor-plan byte count describes those gestures. Synthesizing a voice also uses pitch, loudness and speaker information.
+
+Predicted mouth opening drives the simulated J5 jaw and its crank linkage. The event readout exposes the target, onset
+and duration that a VERA controller could consume. J2 beat nods and J3/J4 gaze illustrate rule-based cues on the same
+timeline. Mapping these targets to physical actuators requires calibration on VERA.
+
+Choose a weight, pen, band, gum, hand or table to hear pre-rendered model speech under that load. Switch reflexes on or
+off to compare the same utterance. Selecting the load again restores the original recording.
 
 The page is static: `python -m http.server` in this folder, then open http://localhost:8000.
 

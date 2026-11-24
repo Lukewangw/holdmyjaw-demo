@@ -1,7 +1,8 @@
 // app.js — Hold My Jaw: the VERA head speaking from a gestural plan.
 // Frame (cm): X = the head's left, Y = up, Z = forward. The anatomy drawing (x forward, y up) maps to (Z, Y) on X = 0.
 import * as THREE from 'three';
-import { buildHardware } from './hardware.js';
+import { buildHardware } from './hardware.js?v=studio2';
+import { grainMap, applyAssemblyLight } from './finishes.js?v=studio2';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Anatomy, LA_CLOSED } from './tract.js';
@@ -40,7 +41,13 @@ const manifest = await getJSON('data/manifest.json');
 const anat = await getJSON('data/anatomy.json');
 const A = new Anatomy(anat.mean_cm, anat.palate_cm.flat(), anat.LA_CLOSED || LA_CLOSED);
 const clipCache = new Map();
-const getClip = (id) => { if (!clipCache.has(id)) clipCache.set(id, getJSON(manifest.clips.find((c) => c.id === id).file)); return clipCache.get(id); };
+function getClip(id) {
+  if(!clipCache.has(id)) {
+    const clip=getJSON(manifest.clips.find(c=>c.id===id).file);
+    clipCache.set(id,clip);clip.catch(()=>clipCache.delete(id));
+  }
+  return clipCache.get(id);
+}
 
 // ------------------------------------------------------------------------------------------------ renderer, scene, camera
 const stage = $('#stage'), canvas = $('#gl');
@@ -71,7 +78,7 @@ async function studioLighting() {
 }
 scene.environment=await studioLighting();
 const camera = new THREE.PerspectiveCamera(23, 1, 2, 500);
-const HOME = { pos: new THREE.Vector3(-43, 6.0, 50.0), tgt: new THREE.Vector3(0, 1.45, -7.4) };
+const HOME = { pos: new THREE.Vector3(-44.65, 5.02, 47.25), tgt: new THREE.Vector3(0, 1.45, -7.4) };
 const VIEWS = { face: HOME, xray: { pos: new THREE.Vector3(64, 7.5, 16), tgt: new THREE.Vector3(0, 0.4, -5.6) }, mech: { pos: new THREE.Vector3(58, 21, 69), tgt: new THREE.Vector3(0, -2.4, -8.4) } };
 const fly = { t: 1, from: null, to: null };
 function flyTo(v) { fly.from = { pos: camera.position.clone(), tgt: controls.target.clone() }; fly.to = v; fly.t = reduceMotion ? 1 : 0; if (reduceMotion) { camera.position.copy(v.pos); controls.target.copy(v.tgt); } }
@@ -81,13 +88,12 @@ controls.target.copy(HOME.tgt); controls.enableDamping = true; controls.dampingF
 controls.minDistance = 28; controls.maxDistance = 120; controls.minPolarAngle = 0.55; controls.maxPolarAngle = 2.05; controls.rotateSpeed = 0.7;
 controls.update();
 
-scene.add(new THREE.HemisphereLight('#f2f5f8', '#3a4046', 0.35));
-const key = new THREE.DirectionalLight('#fff8ef', 1.75); key.position.set(-16, 32, 29); key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 2; key.shadow.normalBias = 0.04; Object.assign(key.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 10, far: 120 }); key.shadow.bias = -0.0006;
+scene.add(new THREE.HemisphereLight('#fcfaf6', '#a89e93', 0.29));
+const key = new THREE.DirectionalLight('#fff9f1', 2.00); key.position.set(-17, 31, 24); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 2; key.shadow.normalBias = .07; Object.assign(key.shadow.camera, { left: -16, right: 16, top: 17, bottom: -16, near: 9, far: 90 }); key.shadow.bias = -.00055;
 key.target.position.set(0, -2, -8); scene.add(key, key.target);
-const rim = new THREE.DirectionalLight('#d7e4ee', 1.05); rim.position.set(30, 20, -40); scene.add(rim);
-const rim2 = new THREE.DirectionalLight('#e5e4dc', .72); rim2.position.set(-34, 10, -30); scene.add(rim2);
-const fill = new THREE.DirectionalLight('#dfe7f1', 0.45); fill.position.set(40, 2, 36); scene.add(fill);
+const rim = new THREE.DirectionalLight('#e1e7ef', .88); rim.position.set(30, 20, -40); scene.add(rim);
+const fill = new THREE.DirectionalLight('#e8eaf0', .31); fill.position.set(36, 5, 27); scene.add(fill);
 // A broad floor reflection and a contact shadow beneath the base keep the
 // studio floor soft. Directional shadows are reserved for the assembly itself.
 const floorMap = document.createElement('canvas'); floorMap.width = floorMap.height = 256;
@@ -116,14 +122,13 @@ const M = {
   shell: xrayify(new THREE.MeshPhysicalMaterial({ color: '#f3f4f5', roughness: 0.3, clearcoat: 0.85, clearcoatRoughness: 0.16, side: THREE.DoubleSide })),
   chin: xrayify(new THREE.MeshPhysicalMaterial({ color: '#eff1f2', roughness: 0.32, clearcoat: 0.85, clearcoatRoughness: 0.16, side: THREE.DoubleSide })),
   base: new THREE.MeshPhysicalMaterial({ color: '#eef0f1', roughness: 0.36, clearcoat: 0.5, clearcoatRoughness: 0.25 }),
-  print: new THREE.MeshStandardMaterial({ color: '#c9d0d5', roughness: 0.6, transparent: true }),
+  print: new THREE.MeshStandardMaterial({ color: '#8c8f89', roughness: 0.6, transparent: true }),
   metal: new THREE.MeshStandardMaterial({ color: '#c3c9cf', metalness: 1, roughness: 0.26, transparent: true }),
   dark: new THREE.MeshStandardMaterial({ color: '#20272d', roughness: 0.45, metalness: 0.25, transparent: true }),
   cable: new THREE.MeshStandardMaterial({ color: '#2f63b5', roughness: 0.55, transparent: true }),
   cable2: new THREE.MeshStandardMaterial({ color: '#b8402f', roughness: 0.55, transparent: true }),
   mouth: new THREE.MeshBasicMaterial({ color: '#0d1114' }),
-  sclera: new THREE.MeshPhysicalMaterial({ color: '#e5dfd3', envMapIntensity:.62, roughness: .34, clearcoat: .55, clearcoatRoughness: .15 }),
-  cornea: new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.02, transparent: true, opacity: 0.18, clearcoat: 1, clearcoatRoughness: 0.02, depthWrite: false }),
+  sclera: new THREE.MeshPhysicalMaterial({ color: '#e8e0d5', envMapIntensity:.70, roughness: .35, clearcoat: .32, clearcoatRoughness: .22 }),
   tongue: new THREE.MeshStandardMaterial({ color: '#e0837b', roughness: 0.5, emissive: '#5a1612', emissiveIntensity: 0.55 }),
   lip: new THREE.MeshStandardMaterial({ color: '#d76c7a', roughness: 0.5, emissive: '#4e1220', emissiveIntensity: 0.5 }),
   bone: new THREE.MeshStandardMaterial({ color: '#efe6d3', roughness: 0.6, emissive: '#3b3324', emissiveIntensity: 0.45 }),
@@ -133,21 +138,21 @@ const M = {
 };
 const MECH = [M.print, M.metal, M.dark, M.cable, M.cable2];
 
-// iris texture: polar layout (x = angle, y = radius from the pupil outwards), for a spherical cap
+// Radial fibres run around the physical pupil well and darken at the limbus.
 function irisTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
   const grd=g.createLinearGradient(0,0,0,128);
-  for (const [stop,col] of [[0,'#070b0d'],[.44,'#090d0e'],[.47,'#1f2c31'],[.55,'#394c56'],
-    [.68,'#425b68'],[.83,'#2c4353'],[.94,'#203643'],[1,'#131c22']]) grd.addColorStop(stop,col);
+  for (const [stop,col] of [[0,'#19272d'],[.15,'#4b5554'],[.35,'#304959'],
+    [.63,'#446073'],[.85,'#2e4556'],[.95,'#19272f'],[1,'#0e171d']]) grd.addColorStop(stop,col);
   g.fillStyle=grd;g.fillRect(0,0,512,128);
   for (let i=0;i<360;i++) {
     const a=i*512/360, wave=Math.sin(i*13.71);
     g.strokeStyle=wave>0?'rgba(112,132,139,.31)':'rgba(16,35,42,.50)';g.lineWidth=1;
-    g.beginPath();g.moveTo(a,62+5*Math.cos(i*6.13));g.quadraticCurveTo(a+wave*4,87,a+wave*2,114+7*wave);g.stroke();
+    g.beginPath();g.moveTo(a,10+9*Math.cos(i*6.13));g.quadraticCurveTo(a+wave*4,57,a+wave*2,114+7*wave);g.stroke();
   }
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;
 }
-const IRIS=new THREE.MeshPhysicalMaterial({map:irisTexture(),roughness:.50,clearcoat:.11,clearcoatRoughness:.17,envMapIntensity:.48});
+const IRIS=new THREE.MeshStandardMaterial({map:irisTexture(),roughness:.66,envMapIntensity:.56});
 function woodTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g = c.getContext('2d');
   g.fillStyle = '#a77a4a'; g.fillRect(0, 0, 512, 256);
@@ -158,9 +163,9 @@ function woodTexture() {
 
 // The face, crown and jaw are finished, individually trimmed solids. Decode
 // the sculpted surfaces without bringing the production model into the browser.
-const header = await getJSON('data/vera_panels.json');
+const header = await getJSON('data/vera_panels.json?v=studio2');
 const loadPanels = async () => {
-  const r = await fetch('data/vera_panels.bin'); if (!r.ok) throw new Error('Panel bundle missing');
+  const r = await fetch('data/vera_panels.bin?v=studio2'); if (!r.ok) throw new Error('Panel bundle missing');
   return r.arrayBuffer();
 };
 const panelBuffer = await loadPanels();
@@ -168,31 +173,17 @@ const LM = header.landmarks;
 TMJ.fromArray(LM.tmj); PITCH.fromArray(LM.pitch); YAW.fromArray(LM.yaw);
 EYE.x=Math.abs(LM.eyes[0][0]); EYE.y=LM.eyes[0][1]; EYE.z=LM.eyes[0][2]; EYE.r=LM.eye_r;
 ground.position.set(0,LM.base_y-.012,YAW.z);
-const ceramic = (color, opts={}) => xrayify(new THREE.MeshPhysicalMaterial({color,roughness:.46,
-  clearcoat:.17,clearcoatRoughness:.33,envMapIntensity:.72,...opts}));
+const ceramic = (color, opts={}) => xrayify(new THREE.MeshPhysicalMaterial({color,roughness:.62,
+  clearcoat:.105,clearcoatRoughness:.40,envMapIntensity:.82,...opts}));
 const finishes = {ivory:ceramic('#e4e0d7'),tinted:ceramic('#ffffff',{vertexColors:true}),
   graphite:xrayify(new THREE.MeshStandardMaterial({color:'#34312d',roughness:.76,side:THREE.DoubleSide})),
   cavity:xrayify(new THREE.MeshStandardMaterial({color:'#211e1c',roughness:.97,envMapIntensity:.14,side:THREE.DoubleSide})),
-  lid:ceramic('#d6d1c7',{metalness:.18}),satin:ceramic('#a5a49f',{metalness:.74,roughness:.36})};
-// A fine, mipmapped mould texture stays in each panel's local coordinates.
-function mouldTexture() {
-  const size=128, pixels=new Uint8Array(size*size*4);
-  let seed=91477;
-  for(let i=0;i<pixels.length;i+=4) {
-    seed=(1664525*seed+1013904223)>>>0;
-    const g=seed>>>24;
-    pixels.set([g,g,g,255],i);
-  }
-  const tex=new THREE.DataTexture(pixels,size,size);
-  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
-  tex.magFilter=THREE.LinearFilter;tex.minFilter=THREE.LinearMipmapLinearFilter;
-  tex.generateMipmaps=true;tex.needsUpdate=true;return tex;
-}
-const mould=mouldTexture();
-for(const finish of [finishes.ivory,finishes.tinted,finishes.lid,finishes.satin]) {
+  lid:ceramic('#d8d2c8'),satin:ceramic('#b4aea3',{metalness:.55,roughness:.43}),
+  fitting:ceramic('#79766d',{metalness:.48,roughness:.55})};
+for(const finish of [finishes.ivory,finishes.tinted,finishes.lid,finishes.satin,finishes.fitting]) {
   const xray=finish.onBeforeCompile;
   finish.onBeforeCompile=(shader,renderer)=>{
-    xray(shader,renderer);shader.uniforms.mouldMap={value:mould};
+    xray(shader,renderer);shader.uniforms.mouldMap={value:grainMap};
     shader.vertexShader=shader.vertexShader
       .replace('#include <common>','#include <common>\nattribute float ambient; varying float vAmbient; varying vec3 vMould; varying vec3 vPrintN;')
       .replace('#include <begin_vertex>','#include <begin_vertex>\nvAmbient=ambient; vMould=position; vPrintN=normal;');
@@ -200,12 +191,17 @@ for(const finish of [finishes.ivory,finishes.tinted,finishes.lid,finishes.satin]
       .replace('#include <common>','#include <common>\nuniform sampler2D mouldMap; varying float vAmbient; varying vec3 vMould; varying vec3 vPrintN;')
       .replace('#include <color_fragment>',`#include <color_fragment>
         vec3 weights=pow(abs(vPrintN),vec3(4.0));weights/=max(dot(weights,vec3(1.0)),.001);
-        vec3 coord=vMould*.44;
-        float grain=dot(weights,vec3(texture2D(mouldMap,coord.yz).r,texture2D(mouldMap,coord.xz).r,texture2D(mouldMap,coord.xy).r))-.5;
-        diffuseColor.rgb*=mix(.42,1.0,vAmbient)*(1.0+.11*grain);`)
-      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+.12*grain,.12,1.0);');
+        vec3 coord=vMould*.17;
+        vec2 grain=(weights.x*texture2D(mouldMap,coord.yz).rg+weights.y*texture2D(mouldMap,coord.xz).rg+weights.z*texture2D(mouldMap,coord.xy).rg)-.5;
+        diffuseColor.rgb*=mix(.43,1.0,vAmbient)*(1.+.13*grain.x+.095*grain.y);`)
+      .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor+.15*grain.x+.09*grain.y,.18,1.0);')
+      .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+        vec3 dp1=dFdx(-vViewPosition),dp2=dFdy(-vViewPosition);
+        vec3 bx=cross(dp2,normal),by=cross(normal,dp1);float det=dot(dp1,bx);
+        float h=.0033*grain.y+.0023*grain.x;
+        normal=normalize(normal-sign(det)*(dFdx(h)*bx+dFdy(h)*by)/max(abs(det),.000001));`);
   };
-  finish.customProgramCacheKey=()=>'vera-print-v1';
+  finish.customProgramCacheKey=()=>'vera-print-v2';
 }
 const shells = {mats:Object.values(finishes)};
 const linearRGB=Float32Array.from({length:256},(_,i)=>{const c=i/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});
@@ -338,16 +334,60 @@ solveCrank(0);
 
 // eyes (J3 common yaw, J4 common pitch; each about its own centre), lids, linkage
 const eyes = [];
-const irisCap=new THREE.SphereGeometry(EYE.r+.008,72,22,0,Math.PI*2,0,.52);irisCap.rotateX(Math.PI/2);
+const cornealAngle=.515, irisR=EYE.r*Math.sin(cornealAngle), limbusZ=EYE.r*Math.cos(cornealAngle);
+function opticalSurface(profile) {
+  const position=[],uv=[],index=[],steps=80;
+  for(let ring=0;ring<profile.length;ring++) {
+    const [r,z,textureRadius]=profile[ring];
+    for(let i=0;i<=steps;i++) {
+      const u=i/steps, angle=u*2*Math.PI;
+      position.push(r*Math.cos(angle),r*Math.sin(angle),z);
+      uv.push(u,1-textureRadius);
+      if(ring && i) {
+        const out=ring*(steps+1)+i, inner=out-steps-1;
+        index.push(inner-1,out-1,inner,inner,out-1,out);
+      }
+    }
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(position,3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(index);g.computeVertexNormals();
+  return g;
+}
+const irisDish=opticalSurface([[.44*irisR,limbusZ-.055,0],[.53*irisR,limbusZ-.02,.14],
+  [.65*irisR,limbusZ+.002,.37],[.86*irisR,limbusZ-.027,.76],[irisR,limbusZ-.01,1]]);
+const pupilMat=new THREE.MeshBasicMaterial({color:'#080d10'});
+const pupil=opticalSurface([[0,limbusZ-.13,0],[.46*irisR,limbusZ-.125,1],[.46*irisR,limbusZ-.045,1]]);
+const globe=new THREE.SphereGeometry(EYE.r,80,48,0,Math.PI*2,cornealAngle,Math.PI-cornealAngle);
+globe.rotateX(Math.PI/2);
+// A clear cornea has a smaller radius of curvature than the white globe.
+// Project the key and fill softboxes in reflection space so the catchlights
+// move across the glass when the visitor or the eye changes direction.
+const cornealR=irisR*1.20, cornealSweep=Math.asin(irisR/cornealR);
+const cornea=new THREE.SphereGeometry(cornealR,72,28,0,Math.PI*2,0,cornealSweep);
+cornea.rotateX(Math.PI/2);cornea.translate(0,0,limbusZ-Math.sqrt(cornealR**2-irisR**2));
+const clearGlass=new THREE.ShaderMaterial({transparent:true,depthWrite:false,
+  vertexShader:`varying vec3 vEyeN; varying vec3 vToCamera;
+  void main(){ vec4 p=modelMatrix*vec4(position,1.);vEyeN=mat3(modelMatrix)*normal;
+    vToCamera=cameraPosition-p.xyz;gl_Position=projectionMatrix*viewMatrix*p; }`,
+  fragmentShader:`varying vec3 vEyeN; varying vec3 vToCamera;
+  float softbox(vec3 ray,vec3 axis,vec2 halfSize) {
+    axis=normalize(axis);vec3 dx=normalize(cross(vec3(0,1,0),axis)),dy=cross(axis,dx);
+    if(dot(ray,axis)<0.) return 0.;
+    vec2 d=abs(vec2(dot(ray,dx),dot(ray,dy)))-halfSize;
+    return 1.-smoothstep(-.024,.024,length(max(d,vec2(0.)))+min(max(d.x,d.y),0.)); }
+  void main(){vec3 n=normalize(vEyeN),eye=normalize(vToCamera),r=reflect(-eye,n);
+    float key=softbox(r,vec3(.20,.43,.93),vec2(.15,.105));
+    float fill=softbox(r,vec3(-.57,.73,.73),vec2(.075,.16));
+    float fres=pow(1.-clamp(dot(n,eye),0.,1.),4.);
+    gl_FragColor=vec4(mix(vec3(.49,.60,.67),vec3(1.,.98,.94),key),.025+.18*fres+.81*key+.31*fill); }`});
 for(const side of [-1,1]) {
   const g=new THREE.Group();g.position.set(side*EYE.x,EYE.y,EYE.z);mechG.add(g);
   const ball=new THREE.Group();g.add(ball);
   const cup=mesh(new THREE.SphereGeometry(1,48,30),oralLiner,g,{pos:[0,0,-.82]});cup.scale.set(2.13,1.80,1.04);
-  const globe=mesh(new THREE.SphereGeometry(EYE.r,64,48),M.sclera,ball,{shadow:false});globe.receiveShadow=true;
-  const iris=mesh(irisCap,IRIS,ball,{shadow:false});iris.receiveShadow=true;
-  const glintMat=new THREE.MeshBasicMaterial({color:'#fffdf7',transparent:true,opacity:.77,toneMapped:false});
-  const specular=mesh(new THREE.SphereGeometry(1,16,12),glintMat,g,{pos:[-.37,.39,Math.sqrt(EYE.r**2-.37**2-.39**2)+.026],shadow:false});
-  specular.scale.set(.097,.134,.028);specular.rotation.z=-.32;
+  mesh(globe,M.sclera,ball,{shadow:false}).receiveShadow=true;
+  mesh(irisDish,IRIS,ball,{shadow:false}).receiveShadow=true;
+  mesh(pupil,pupilMat,ball,{shadow:false});
+  mesh(cornea,clearGlass,ball,{shadow:false});
   mesh(rbox(.3,.3,1.9,.1),M.metal,ball,{pos:[0,0,-1.9]});
   const gimbal=mesh(new THREE.TorusGeometry(EYE.r+.06,.07,12,64),M.print,g,{pos:[0,0,-1.39]});
   gimbal.scale.y=.94;eyes.push({g,ball});
@@ -506,11 +546,8 @@ for (const t of TAGS) { t.el = document.createElement('div'); t.el.className = '
 // ------------------------------------------------------------------------------------------------ views: face / X-ray / mechanism
 const view = { mode: 'face', x: 0, xT: 0, mech: 1, mechT: 1, tract: 0, tractT: 0, explode: 0, explodeT: 0 };
 function setView(mode) {
-  if(mode!==view.mode){
-    flatBox.hidden=mode!=='xray';
-    $('#flat-btn').setAttribute('aria-pressed',String(!flatBox.hidden));
-  }
   view.mode = mode;
+  showCutaway(mode==='mech' ? false : cutawayVisible);
   view.xT = mode === 'face' ? 0 : 1;
   view.tractT = mode === 'xray' ? 1 : 0;
   view.mechT = mode === 'xray' ? 0.045 : 1;
@@ -528,7 +565,16 @@ $('#explode-r').oninput = (e) => { view.explodeT = +e.target.value; };
 if ($('#explode-btn')) $('#explode-btn').onclick = () => { setView('mech'); view.explodeT = 1; $('#explode-r').value = 1; stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' }); };
 $('#reset-btn').onclick = () => flyTo(VIEWS[view.mode]);
 const flatBox = $('#flat');
-$('#flat-btn').onclick = () => { const on = flatBox.hidden; flatBox.hidden = !on; $('#flat-btn').setAttribute('aria-pressed', String(on)); };
+let cutawayVisible = true;
+function showCutaway(visible) {
+  flatBox.hidden = !visible;
+  $('#flat-btn').setAttribute('aria-pressed', String(visible));
+}
+$('#flat-btn').onclick = () => {
+  const visible = flatBox.hidden;
+  if (view.mode !== 'mech') cutawayVisible = visible;
+  showCutaway(visible);
+};
 let hintT = null;
 function hint(show, text) { const h = $('#hint'); if (text) h.textContent = text; h.classList.toggle('gone', !show); clearTimeout(hintT); if (show) hintT = setTimeout(() => h.classList.add('gone'), 6000); }
 
@@ -542,11 +588,17 @@ class Player {
     if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
-  prefetch(url) { if (url && !this.raw.has(url)) this.raw.set(url, fetchAudio(url)); }
+  prefetch(url) {
+    if(!url || this.raw.has(url)) return;
+    const bytes=fetchAudio(url); this.raw.set(url,bytes);
+    bytes.catch(()=>this.raw.delete(url));
+  }
   async buffer(url) {
     if (!this.buf.has(url)) {
       this.prefetch(url);
-      this.buf.set(url, this.raw.get(url).then((a) => new Promise((res, rej) => this.ctx.decodeAudioData(a.slice(0), res, rej))));
+      const decoded=this.raw.get(url).then(a=>new Promise((res,rej)=>this.ctx.decodeAudioData(a.slice(0),res,rej)));
+      this.buf.set(url,decoded);
+      decoded.catch(()=>{ this.buf.delete(url); this.raw.delete(url); });
     }
     return this.buf.get(url);
   }
@@ -559,6 +611,7 @@ class Player {
     catch(error) { if(revision!==this.revision) return false; this.starting=false; throw error; }
     if(revision!==this.revision) return false;
     this.starting=false; const ctx=this.ctx;
+    if(from==null) from=this.time();
     this.stopSrc();
     const g = ctx.createGain(), s = ctx.createBufferSource(); s.buffer = b; s.connect(g); g.connect(ctx.destination);
     const now = ctx.currentTime + 0.03, at = clamp(from, 0, Math.max(b.duration - 0.05, 0));
@@ -574,15 +627,19 @@ class Player {
     g.gain.cancelScheduledValues(now); g.gain.setValueAtTime(g.gain.value, now); g.gain.linearRampToValueAtTime(0, now + 0.03); s.onended = null; s.stop(now + 0.04);
   }
   async swap(url) {
-    if(this.starting || (this.playing && url!==this.url)) { await this.play(url,this.time()); }
+    this.requestedUrl=url;
+    if(this.starting || (this.playing && url!==this.url)) { await this.play(url,null); }
     else this.url=url;
   }
-  seek(t) { if (this.playing) this.play(this.url, t); else this.off = t; }
+  seek(t) {
+    if(this.playing || this.starting) this.play(this.requestedUrl||this.url,t).catch(()=>this.onfail?.());
+    else this.off=t;
+  }
 }
 const player = new Player();
 
 // ------------------------------------------------------------------------------------------------ state, clips, UI
-const S = { kind: 'speech', clip: null, voice: 'ours', load: null, reflex: true, t: 0, ema: null, anim: null };
+const S = { kind: 'speech', clip: null, load: null, reflex: true, t: 0, ema: null, anim: null };
 const SHELF = {
   weight: { name: 'Weight', title: 'A weight on the chin', icon: '<circle cx="24" cy="10.5" r="4.2" fill="none" stroke="#8fa0ad" stroke-width="2.6"/><path d="M16.5 15.5h15l5.2 21.3q.9 4.7-3.6 4.7H14.9q-4.5 0-3.6-4.7z" fill="#5a6b78" stroke="#38464f" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 21h12" stroke="#c2d0da" stroke-width="2" stroke-linecap="round" opacity=".7"/>' },
   pen: { name: 'Pen', title: 'A pen between the teeth', icon: '<g transform="rotate(-118 24 24)"><rect x="20" y="5" width="8" height="28" rx="1.5" fill="#f2a93b" stroke="#8a560c" stroke-width="1.6"/><path d="M20 33h8l-4 9z" fill="#f3dfc0" stroke="#8a560c" stroke-width="1.6" stroke-linejoin="round"/><path d="M22.6 38.9h2.8L24 42z" fill="#3a2a12"/><rect x="20" y="5" width="8" height="5" rx="1.5" fill="#e2574c" stroke="#8a560c" stroke-width="1.6"/></g>' },
@@ -604,63 +661,62 @@ function variant() {   // the original recording; with a load on the face, our v
   if (S.load && c.loads && c.loads[S.load]) { const v = c.loads[S.load][S.reflex ? 'on' : 'off']; return { url: v.audio, ema: v.ema, key: `${S.load}_${S.reflex ? 'on' : 'off'}`, v }; }
   return { url: c.audio.orig, ema: c.ema, key: 'orig' };
 }
+let variantRevision=0;
 async function applyVariant() {
+  const revision=++variantRevision;
   const v = variant(); if (!v) return;
-  S.ema = v.ema; S.cues = veraCues(S.clip, v.ema); player.prefetch(v.url);
-  await player.swap(v.url);
+  player.prefetch(v.url);
+  try { await player.swap(v.url); }
+  catch { if(revision===variantRevision) $('#playcap').textContent='Audio could not load. Press play to retry.'; return; }
+  if(revision!==variantRevision) return;
+  S.ema = v.ema; S.cues = veraCues(S.clip, v.ema);
   renderScoreStatic(); updateCaptions();
 }
 function setLoad(k) {
   if (S.kind !== 'speech') return;
   S.load = k;
+  if(k && S.clip.loads?.[k]) {
+    player.prefetch(S.clip.loads[k].on.audio);
+    player.prefetch(S.clip.loads[k].off.audio);
+  }
   for (const b of shelf.children) b.setAttribute('aria-pressed', String(b.dataset.load === k));
   for (const p of ['weight', 'pen', 'band', 'gum', 'hand', 'table']) props[p].visible = p === k;
   if (k === 'gum' && view.mode === 'face') hint(true, 'Gum → X-ray');
   applyVariant();
 }
-const fmtPct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 function updateCaptions() {
-  const c = S.clip; if (!c) return;
-  const g = c.gestures.length, pk = c.packet;
-  $('#voicecap').textContent = S.load ? `Our voice · ${SHELF[S.load].name.toLowerCase()} on the face · reflexes ${S.reflex ? 'on' : 'off'}` : `Original recording · the head moves with our model of it`;
-  // heard
-  const h = $('#heard'); h.innerHTML = '';
-  if (c.kind === 'song') { h.textContent = ''; return; }
-  if (S.load && c.loads && c.loads[S.load]) {
-    const on = c.loads[S.load].on, off = c.loads[S.load].off, cur = S.reflex ? on : off;
-    h.innerHTML = `<q></q><br><span class="wer">WER <b class="${on.wer > 0.3 ? 'bad' : 'good'}">${fmtPct(on.wer)}</b> reflexes on · <b class="${off.wer > 0.3 ? 'bad' : 'good'}">${fmtPct(off.wer)}</b> off</span>`;
-    h.querySelector('q').textContent = cur.hyp || '';
+  const c=S.clip;
+  if (!c) return;
+  const loaded=c.kind==='speech' && S.load && c.loads?.[S.load];
+  $('#voicecap').textContent=loaded
+    ? `Our synthesis · reflexes ${S.reflex?'on':'off'}`
+    : c.kind==='song'?'Original singing':'Original recording';
+  $('#reflex').disabled=!loaded;
+  const heard=$('#heard');
+  if(loaded) {
+    const result=loaded[S.reflex?'on':'off'];
+    heard.textContent='Recognizer heard ';
+    const quote=document.createElement('q');quote.textContent=result.hyp || '…';heard.append(quote);
   } else {
-    h.textContent = '';
+    heard.textContent='Choose a load to hear our synthesized voice.';
   }
 }
-
-function utf8Len(s) { return new TextEncoder().encode(s).length; }
-function renderPlanCard(c) {
-  const pk = $('#packet'), st = $('#stats'); pk.innerHTML = ''; st.innerHTML = '';
-  if (c.packet && c.packet.hex) {
-    for (let i = 0; i < c.packet.hex.length; i += 2) { const s = document.createElement('span'); s.textContent = c.packet.hex.slice(i, i + 2); pk.appendChild(s); }
-    st.innerHTML = `<div class="stat"><b>${c.packet.bytes} B</b><span>sentence</span></div><div class="stat"><b>${c.packet.bps.toFixed(0)} b/s</b><span>rate</span></div><div class="stat"><b>${c.gestures.length}</b><span>gestures</span></div>`;
-  } else {
-    pk.innerHTML = '<span>not packed</span>';
-    const m = c.metrics || {};
-    st.innerHTML = `<div class="stat"><b>${c.gestures.length}</b><span>gestures</span></div><div class="stat"><b>${(c.phones || []).length}</b><span>phones</span></div><div class="stat"><b>${m.f0_cents_rmse_ours != null ? Math.round(m.f0_cents_rmse_ours) + '¢' : '–'}</b><span>pitch error</span></div>`;
-  }
-}
-
 function renderClipList() {
-  const box = $('#clips'); box.innerHTML = '';
-  for (const c of manifest.clips.filter((x) => x.kind === S.kind)) {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = c.title; b.dataset.id = c.id; b.setAttribute('aria-pressed', String(S.clip && S.clip.id === c.id));
-    b.onclick = () => loadClip(c.id); box.appendChild(b);
-  }
+  const select=$('#clips'), clips=manifest.clips.filter(c=>c.kind===S.kind);
+  const index=clips.findIndex(c=>c.id===S.clip.id);
+  select.replaceChildren(...clips.map((c,i)=>new Option(c.title,c.id,false,i===index)));
+  const digits=n=>String(n).padStart(2,'0');
+  $('#clip-no').textContent=`${S.kind==='speech'?'Sentence':'Song'} ${digits(index+1)} / ${digits(clips.length)}`;
 }
+$('#clips').onchange=e=>loadClip(e.target.value);
 function setKind(k) {
-  S.kind = k; $('#t-speech').setAttribute('aria-pressed', String(k === 'speech')); $('#t-song').setAttribute('aria-pressed', String(k === 'song'));
-  $('#loadcard').style.opacity = k === 'speech' ? '' : '0.55';
-  for (const b of shelf.children) b.disabled = k !== 'speech';
-  $('#reflex').disabled = k !== 'speech';
-  const first = manifest.clips.find((x) => x.kind === k); if (first) loadClip(first.id);
+  S.kind=k;
+  $('#t-speech').setAttribute('aria-pressed',String(k==='speech'));
+  $('#t-song').setAttribute('aria-pressed',String(k==='song'));
+  $('#loadcard').hidden=k!=='speech';
+  for(const b of shelf.children) b.disabled=k!=='speech';
+  const first=manifest.clips.find(c=>c.kind===k);
+  if(first) loadClip(first.id);
 }
 $('#t-speech').onclick = () => setKind('speech');
 $('#t-song').onclick = () => setKind('song');
@@ -668,17 +724,25 @@ $('#t-song').onclick = () => setKind('song');
 let loadSeq = 0;
 async function loadClip(id) {
   const seq = ++loadSeq; const was = player.playing || player.starting; player.pause(); player.off = 0;
-  const c = await getClip(id); if (seq !== loadSeq) return;
+  ++variantRevision; setPlayIcon(false);
+  $('#play').disabled=true; $('#scrub').disabled=true;
+  let c;
+  try { c=await getClip(id); }
+  catch { if(seq===loadSeq) $('#playcap').textContent='Recording unavailable. Choose another clip.'; return; }
+  if(seq!==loadSeq) return;
   S.clip = c; S.t = 0; if (c.kind !== 'speech') { S.load = null; for (const p of Object.keys(SHELF)) props[p].visible = false; for (const b of shelf.children) b.setAttribute('aria-pressed', 'false'); }
   renderClipList();
   const say = $('#say'); say.innerHTML = '';
   if (c.words && c.words.length) for (const [w, t0, t1] of c.words) { const s = document.createElement('span'); s.className = 'w'; s.textContent = w; s.dataset.t0 = t0; s.dataset.t1 = t1; say.append(s, ' '); }
   else say.textContent = c.text;
   $('#who').textContent = c.speaker || '';
-  renderPlanCard(c);
-  player.prefetch(c.audio.orig);
+  const scrub=$('#scrub');
+  scrub.max=c.dur.toFixed(3); scrub.value='0';
+  lastWord=-1;
   await applyVariant(); if(seq!==loadSeq) return;
-  $('#scoremeta').textContent = `${c.gestures.length} gestures · ${c.dur.toFixed(2)} s`;
+  $('#play').disabled=false; $('#scrub').disabled=false; $('#playcap').textContent='';
+  const packet=c.packet?.bytes ? ` · ${c.packet.bytes} B motor plan` : '';
+  $('#scoremeta').textContent=`${c.gestures.length} gestures${packet} · ${c.dur.toFixed(2)} s`;
   if (was) play();
 }
 
@@ -688,13 +752,16 @@ function setPlayIcon(p) { $('#play-icon').setAttribute('d', p ? ICON.pause : ICO
 async function play() {
   const v = variant(); if (!v) return;
   try { await player.play(v.url, player.off); }
-  catch (e) { $('#playcap').textContent = 'No sound in this browser.'; }
+  catch { player.onfail(); }
   hint(false);
 }
 player.onstart = () => { setPlayIcon(true); $('#playcap').textContent = ''; };
+player.onfail = () => { setPlayIcon(player.playing); $('#playcap').textContent='Audio could not load. Press play to retry.'; };
 player.onend = () => { setPlayIcon(false); S.anim = { yield: 0 }; };
+const scrubber=$('#scrub');
+scrubber.addEventListener('input',()=>player.seek(Number(scrubber.value)));
 $('#play').onclick = () => { if (player.playing || player.starting) { player.pause(); setPlayIcon(false); } else play(); };
-addEventListener('keydown', (e) => { if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); $('#play').click(); } });
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $('#play').click(); } });
 
 // ------------------------------------------------------------------------------------------------ per-frame posture
 const z = new Float64Array(12);
@@ -780,6 +847,17 @@ function veraCues(c, E) {
   const j2 = spring(g, N, fps, 2.2);
   const gazeEvents = [{ role: 'attend', cue: 'J3/J4 gaze', t0: 0, t1: dur, target: 'partner' }];
   return { j5, j5Events, nodEvents, j2, gazeEvents, N, fps };
+}
+const eventType=$('#event-type');
+let displayedEvent;
+function showEvent(t) {
+  const events=S.cues?.[eventType.value] || [];
+  const event=events.find(e=>e.t1>t) || events[events.length-1];
+  if(displayedEvent===event) return;
+  displayedEvent=event;
+  $('#evt-target').textContent=event ? (typeof event.target==='number'?event.target.toFixed(1)+'°':event.target) : '—';
+  $('#evt-onset').textContent=event?event.t0.toFixed(2)+' s':'—';
+  $('#evt-duration').textContent=event?(event.t1-event.t0).toFixed(2)+' s':'—';
 }
 const sampleAt = (arr, fps, t) => { const f = clamp(t * fps, 0, arr.length - 1), i = Math.floor(f), k = Math.min(i + 1, arr.length - 1); return lerp(arr[i], arr[k], f - i); };
 
@@ -919,8 +997,13 @@ let lastWord = -1;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.1), time = clock.elapsedTime;
-  if (!visible || !ready) return;
+  if (!ready) return;
   const t = player.time(); S.t = t;
+  showEvent(t);
+  if(!visible) {
+    if(S.clip) { $('#time').textContent=`${t.toFixed(1)} / ${S.clip.dur.toFixed(1)} s`; scrubber.value=t; }
+    drawScore(t);return;
+  }
   // views
   const k = 1 - Math.exp(-dt / 0.18);
   view.x += (view.xT - view.x) * k; view.tract += (view.tractT - view.tract) * k; view.mech += (view.mechT - view.mech) * k; view.explode += (view.explodeT - view.explode) * k;
@@ -935,6 +1018,7 @@ function frame() {
   for (const m of [M.tongue, M.lip, M.bone, M.tooth, M.soft]) m.emissiveIntensity = 0.35 + 0.35 * view.tract;
   for (const d of sensorDots) d.material.opacity = view.tract;
   const ex = view.explode;
+  contactStrength.value=.83*(1-.75*ex)*(1-view.x);
   shells.P1.position.set(0, 0, 7.5 * ex); shells.P2.position.set(0, 0, -8 * ex); jawPivot.position.set(TMJ.x, TMJ.y - 5 * ex, TMJ.z + 4.5 * ex);
   P6.position.set(0, -2.6 * ex, 0); P7.position.set(0, -6.5 * ex, 0); yawG.position.set(YAW.x, YAW.y - 6.5 * ex, YAW.z);
   shells.P3.position.set(0,-.80*ex,2.0*ex);
@@ -968,9 +1052,8 @@ function frame() {
     else if (S.anim && S.anim.yield != null) nodT = sampleAt(S.cues.j2, S.clip.fps, S.clip.T / S.clip.fps + S.anim.yield) * DEG;
   }
   gaze.nod += (nodT - gaze.nod) * (1 - Math.exp(-dt / 0.03));
-  const yieldNod = 0;
   yawG.rotation.y = reduceMotion ? 0 : gaze.neckYaw;
-  pitchG.rotation.x = reduceMotion ? 0 : -gaze.neckPitch + gaze.nod + yieldNod + Math.sin(time * 0.9) * 0.15 * DEG;
+  pitchG.rotation.x = gaze.nod + (reduceMotion ? 0 : -gaze.neckPitch + Math.sin(time * 0.9) * 0.15 * DEG);
   for (const e of eyes) e.ball.rotation.set(-gaze.eyePitch,gaze.eyeYaw,0,'YXZ');
   // eye linkage: tie rod between the two arms' tips, links to the servos
   const tips = eyes.map((e) => e.ball.localToWorld(tmpV.set(0, 0, -2.75)).clone()).map((p) => mechG.worldToLocal(p));
@@ -979,10 +1062,13 @@ function frame() {
   setBar(eyeLinkY, new THREE.Vector3(0, EYE_SERVO_Y[0], EYE_SERVO_Z + 1.2), mid, 0.08); setBar(eyeLinkP, new THREE.Vector3(0.0, EYE_SERVO_Y[1], EYE_SERVO_Z + 1.2), mid, 0.08);
   // readouts
   $('#j1').textContent = `${(yawG.rotation.y / DEG).toFixed(1)}°`;
-  $('#j2').textContent = `${(-pitchG.rotation.x / DEG).toFixed(1)}°`;
+  $('#j2').textContent = `${(pitchG.rotation.x / DEG).toFixed(1)}°`;
   $('#j34').textContent = `${(gaze.eyeYaw / DEG).toFixed(0)}° ${(gaze.eyePitch / DEG).toFixed(0)}°`;
   $('#j5').textContent = `${(gaze.j5 / DEG).toFixed(1)}°`;
-  if (S.clip) $('#time').textContent = `${t.toFixed(2)} / ${(S.clip.T / S.clip.fps).toFixed(2)} s`;
+  if(S.clip) {
+    $('#time').textContent=`${t.toFixed(1)} / ${S.clip.dur.toFixed(1)} s`;
+    scrubber.value=t;
+  }
   drawScore(t);
   if (fly.t < 1 && fly.to) { fly.t = Math.min(fly.t + dt / 0.9, 1); const e = fly.t < 0.5 ? 2 * fly.t * fly.t : 1 - Math.pow(-2 * fly.t + 2, 2) / 2;
     camera.position.lerpVectors(fly.from.pos, fly.to.pos, e); controls.target.lerpVectors(fly.from.tgt, fly.to.tgt, e); }
@@ -1003,26 +1089,14 @@ const reTheme = () => { readTheme(); XR.uRim.value.set(C.rim); renderScoreStatic
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reTheme);
 new MutationObserver(reTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-// story figures from the data
-(async () => {
-  try {
-    const sp = manifest.clips.filter((c) => c.kind === 'speech');
-    const all = await Promise.all(sp.map((c) => getClip(c.id)));
-    let on = 0, off = 0, n = 0, wo = 0, wr = 0, uo = 0, ur = 0;
-    for (const c of all) {
-      wo += c.metrics.wer_ours; wr += c.metrics.wer_orig; uo += c.metrics.utmos_ours || 0; ur += c.metrics.utmos_orig || 0;
-      for (const l of Object.values(c.loads || {})) { on += l.on.wer; off += l.off.wer; n++; }
-    }
-    if (n && $('#fig-load')) $('#fig-load').textContent = `${Math.round(100 * on / n)}% · ${Math.round(100 * off / n)}%`;
-  } catch (e) { /* figures stay as written */ }
-})();
-
 // go
+const contactStrength={value:.83};
+try { await applyAssemblyLight(root,contactStrength); }
+catch { /* Direct and environment lighting remain available if the bake cannot load. */ }
 $('#loading').remove();
 ready = true;
 setKind('speech');
 hint(false);
 requestAnimationFrame(frame);
-document.title = document.title;   // keep
 window.__ready = true;
 window.__dbg = {view,S,player,gaze,camera,controls,fly,shells,jawPivot,jawG,headG,crank,coupler,lever,eyes,P4,P5,P6,P7,renderer,scene};
