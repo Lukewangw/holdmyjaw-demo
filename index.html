@@ -124,7 +124,7 @@ h2,h3 {font-family:var(--f-display);letter-spacing:-.025em;line-height:1.22;font
 .track {width:24px;height:14px;position:relative;border-radius:9px;background:var(--ink-3)}.track:after {content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--panel)}
 .switch[aria-checked="true"] .track {background:var(--ok)}.switch[aria-checked="true"] .track:after {left:12px}.switch:disabled {opacity:.58}
 .switch:disabled .track {background:var(--ink-3)}
-.shelf {display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;margin:12px 0 9px}
+.shelf {display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:5px;margin:12px 0 9px}
 .tok {display:grid;justify-items:center;gap:4px;font-size:10px;color:var(--ink-2);border:none;background:none;padding:0}
 .disc {display:grid;place-items:center;width:100%;max-width:49px;height:39px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .disc svg {height:30px;width:30px}
@@ -234,6 +234,6 @@ footer p {margin:0}
   </footer>
 </div>
 
-<script type="module" src="./app.js?v=voice-vera3"></script>
+<script type="module" src="./app.js?v=voice-vera4"></script>
 </body>
 </html>

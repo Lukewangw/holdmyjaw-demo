@@ -153,13 +153,6 @@ function irisTexture() {
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;
 }
 const IRIS=new THREE.MeshStandardMaterial({map:irisTexture(),roughness:.66,envMapIntensity:.56});
-function woodTexture() {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g = c.getContext('2d');
-  g.fillStyle = '#a77a4a'; g.fillRect(0, 0, 512, 256);
-  for (let i = 0; i < 90; i++) { g.strokeStyle = `rgba(${70 + Math.random() * 40},${45 + Math.random() * 25},${20},${0.18 + Math.random() * 0.25})`; g.lineWidth = 1 + Math.random() * 3;
-    const y = Math.random() * 256; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= 512; x += 32) g.lineTo(x, y + Math.sin(x * 0.02 + i) * 4); g.stroke(); }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-}
 
 // The face, crown and jaw are finished, individually trimmed solids. Decode
 // the sculpted surfaces without bringing the production model into the browser.
@@ -480,10 +473,10 @@ const props = {};
   mesh(new THREE.TorusGeometry(0.55, 0.12, 10, 24, Math.PI), M.metal, w, { pos: [0, -9.1, -0.6] });
   props.weight = w;
   const pen = new THREE.Group(); headG.add(pen);   // pen across the mouth, between the teeth
-  const penBody = mesh(new THREE.CylinderGeometry(0.42, 0.42, 11, 24), new THREE.MeshStandardMaterial({ color: '#f2a93b', roughness: 0.45 }), pen, { rot: [0, 0, Math.PI / 2] });
+  mesh(new THREE.CylinderGeometry(0.42, 0.42, 11, 24), new THREE.MeshStandardMaterial({ color: '#f2a93b', roughness: 0.45 }), pen, { rot: [0, 0, Math.PI / 2] });
   mesh(new THREE.CylinderGeometry(0.43, 0.43, 1.6, 24), new THREE.MeshStandardMaterial({ color: '#e2574c', roughness: 0.45 }), pen, { pos: [5.0, 0, 0], rot: [0, 0, Math.PI / 2] });
   mesh(new THREE.ConeGeometry(0.42, 1.2, 24), new THREE.MeshStandardMaterial({ color: '#f3dfc0', roughness: 0.6 }), pen, { pos: [-6.1, 0, 0], rot: [0, 0, Math.PI / 2] });
-  props.pen = pen; props.penBody = penBody;
+  props.pen = pen;
   const band = new THREE.Group(); jawG.add(band);   // rubber band from the lower lip to the chin
   const bc = new THREE.CatmullRomCurve3([[0.85, -1.95, 1.0], [1.05, -3.0, 0.8], [1.0, -4.3, 0.95], [0.65, -5.38, 0.15], [-0.65, -5.38, 0.15], [-1.0, -4.3, 0.95], [-1.05, -3.0, 0.8], [-0.85, -1.95, 1.0]].map((p) => new THREE.Vector3(...p)), true);
   mesh(new THREE.TubeGeometry(bc, 90, 0.13, 10, true), new THREE.MeshStandardMaterial({ color: '#d8453b', roughness: 0.5 }), band);
@@ -501,12 +494,7 @@ const props = {};
   const arm = new THREE.CatmullRomCurve3([[0, -6.9, -3.5], [0, -9.5, -1.0], [0, -14, 4]].map((p) => new THREE.Vector3(...p)));
   mesh(new THREE.TubeGeometry(arm, 20, 2.0, 16), glove, hand);
   props.hand = hand;
-  const table = new THREE.Group(); baseG.add(table);   // the chin on a table
-  const wood = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.7 });
-  const top = mesh(rbox(44, 1.6, 22, 0.4), wood, table, { pos: [0, -6.3, 5.2] }); top.receiveShadow = true;
-  for (const [x, z] of [[-20, 15], [20, 15]]) mesh(new THREE.CylinderGeometry(0.9, 0.9, 6.5, 16), wood, table, { pos: [x, -10.3, z] });
-  props.table = table;
-  for (const k of ['weight', 'pen', 'band', 'gum', 'hand', 'table']) props[k].visible = false;
+  for (const prop of Object.values(props)) prop.visible = false;
 }
 
 // ------------------------------------------------------------------------------------------------ joint arcs and tags (mechanism view)
@@ -660,7 +648,6 @@ const SHELF = {
   band: { name: 'Band', title: 'A rubber band from the lower lip to the chin', icon: '<ellipse cx="24" cy="24" rx="15" ry="10.5" fill="none" stroke="#8c2a24" stroke-width="6" transform="rotate(-18 24 24)"/><ellipse cx="24" cy="24" rx="15" ry="10.5" fill="none" stroke="#e2574c" stroke-width="3.2" transform="rotate(-18 24 24)"/>' },
   gum: { name: 'Gum', title: 'Gum on the tongue', icon: '<path d="M9.5 31c-.9-7.6 4.2-13.3 10.7-12.3 2.7-4.7 9.9-4.6 12.5.3 5.6-.3 9.3 5.4 8 12z" fill="#c9f0dc" stroke="#4f9a78" stroke-width="1.7" stroke-linejoin="round"/><path d="M17 26.5q2.5-2.8 5.5-1.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M13 35.5h23" stroke="#4f9a78" stroke-width="1.7" stroke-linecap="round"/>' },
   hand: { name: 'Hand', title: 'A hand that holds the chin up', icon: '<path d="M8 27.5c0-2.2 1.8-4 4-4h17.5c2 0 3.5 1.4 3.5 3.2 0 1.9-1.5 3.3-3.5 3.3H26l11.2.1c2 0 3.3 1.3 3.3 3 0 1.8-1.3 3-3.3 3l-2.7.1c1.7.2 2.8 1.3 2.8 2.8 0 1.7-1.3 2.8-3.2 2.8H17.5C12 41.8 8 37.9 8 32.5z" fill="#c3d0d9" stroke="#51626e" stroke-width="1.7" stroke-linejoin="round"/><path d="M22 18V7.5M17.2 12.3 22 7.5l4.8 4.8" fill="none" stroke="#51626e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>' },
-  table: { name: 'Table', title: 'The chin on a table', icon: '<rect x="5" y="17" width="38" height="6" rx="1.5" fill="#a9824f" stroke="#5f4526" stroke-width="1.6"/><path d="M11 23v18M37 23v18" stroke="#5f4526" stroke-width="5.2" stroke-linecap="round"/><path d="M11 23v18M37 23v18" stroke="#8d6c46" stroke-width="2.4" stroke-linecap="round"/>' },
 };
 const shelf = $('#shelf');
 for (const [k, v] of Object.entries(SHELF)) {
@@ -693,8 +680,11 @@ function setLoad(k) {
     player.prefetch(S.clip.loads[k].on.audio);
     player.prefetch(S.clip.loads[k].off.audio);
   }
-  for (const b of shelf.children) b.setAttribute('aria-pressed', String(b.dataset.load === k));
-  for (const p of ['weight', 'pen', 'band', 'gum', 'hand', 'table']) props[p].visible = p === k;
+  for (const button of shelf.children) {
+    const selected = button.dataset.load === k;
+    button.setAttribute('aria-pressed', String(selected));
+    props[button.dataset.load].visible = selected;
+  }
   if (k === 'gum' && view.mode === 'face') hint(true, 'Gum → X-ray');
   applyVariant();
 }

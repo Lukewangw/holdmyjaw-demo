@@ -10,7 +10,7 @@ Predicted mouth opening drives the simulated J5 jaw and its crank linkage. The e
 and duration that a VERA controller could consume. J2 beat nods and J3/J4 gaze illustrate rule-based cues on the same
 timeline. Mapping these targets to physical actuators requires calibration on VERA.
 
-Choose a weight, pen, band, gum, hand or table to hear pre-rendered model speech under that load. Switch reflexes on or
+Choose a weight, pen, band, gum or a hand to hear pre-rendered model speech under that load. Switch reflexes on or
 off to compare the same utterance. Selecting the load again restores the original recording.
 
 The page is static: `python -m http.server` in this folder, then open http://localhost:8000.
